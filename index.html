@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="zinc">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content" />
+  <meta name="theme-color" content="#09090b" />
+  <meta name="description" content="NullVoid — Ephemeral P2P Mesh Chat. No logs. No trace. No backend." />
+  <title>NullVoid // Ephemeral Mesh</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PeerJS WebRTC -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <style>
+    /* ════════════════════════════════════
+       CSS CUSTOM PROPERTIES — THEME ENGINE
+    ════════════════════════════════════ */
+    :root {
+      --bg:          #09090b;
+      --bg-raised:   #111113;
+      --bg-hover:    #18181b;
+      --border:      #27272a;
+      --border-sub:  #1f1f22;
+      --text:        #f4f4f5;
+      --text-muted:  #a1a1aa;
+      --text-dim:    #52525b;
+      --accent:      #22c55e;
+      --accent-dim:  #166534;
+      --self-bg:     #1a2e1a;
+      --self-border: #166534;
+      --peer-bg:     #18181b;
+      --peer-border: #27272a;
+      --input-bg:    #111113;
+    }
+
+    [data-theme="zinc"]   { --bg:#09090b; --bg-raised:#111113; --bg-hover:#18181b; --border:#27272a; --border-sub:#1f1f22; --input-bg:#111113; }
+    [data-theme="abyss"]  { --bg:#050814; --bg-raised:#090d1c; --bg-hover:#0e1228; --border:#1a1f3a; --border-sub:#141830; --input-bg:#090d1c; }
+    [data-theme="forest"] { --bg:#07130e; --bg-raised:#0c1f15; --bg-hover:#112a1c; --border:#1a3323; --border-sub:#142a1c; --input-bg:#0c1f15; }
+    [data-theme="violet"] { --bg:#0d0b18; --bg-raised:#151221; --bg-hover:#1c1830; --border:#2a2540; --border-sub:#201d35; --input-bg:#151221; }
+    [data-theme="oled"]   { --bg:#000000; --bg-raised:#0a0a0a; --bg-hover:#111111; --border:#222222; --border-sub:#181818; --input-bg:#0a0a0a; }
+
+    /* ════════════════════════════════════
+       RESET & BASE
+    ════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #app {
+      width: 100%;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      transition: background 0.3s ease;
+      overflow: hidden;
+    }
+
+    /* ════════════════════════════════════
+       SCREEN ROUTER
+    ════════════════════════════════════ */
+    .screen { display: none; width: 100%; flex: 1; flex-direction: column; overflow: hidden; }
+    .screen.active { display: flex; }
+
+    /* ════════════════════════════════════
+       ANIMATIONS
+    ════════════════════════════════════ */
+    @keyframes pulse-dot {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:0.55; transform:scale(0.8); }
+    }
+    @keyframes bounce-dot {
+      0%,80%,100% { transform:translateY(0); opacity:0.45; }
+      40%          { transform:translateY(-5px); opacity:1; }
+    }
+    @keyframes fade-up {
+      from { opacity:0; transform:translateY(5px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    @keyframes slide-in {
+      from { opacity:0; transform:scale(0.97); }
+      to   { opacity:1; transform:scale(1); }
+    }
+
+    .pulse-dot {
+      display:inline-block; width:7px; height:7px; border-radius:50%;
+      background:var(--accent); animation:pulse-dot 2s ease-in-out infinite;
+      flex-shrink:0;
+    }
+    .typing-dot {
+      display:inline-block; width:5px; height:5px; border-radius:50%;
+      background:var(--text-muted); animation:bounce-dot 1.2s ease-in-out infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay:0.2s; }
+    .typing-dot:nth-child(3) { animation-delay:0.4s; }
+
+    .fade-up { animation:fade-up 0.18s ease forwards; }
+
+    /* ════════════════════════════════════
+       SCROLLBAR
+    ════════════════════════════════════ */
+    ::-webkit-scrollbar { width:4px; height:4px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+    * { scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+
+    /* ════════════════════════════════════
+       TYPOGRAPHY UTILS
+    ════════════════════════════════════ */
+    .mono { font-family:ui-monospace,'Cascadia Code','Fira Code',Menlo,monospace; }
+    .branding {
+      font-family:ui-monospace,monospace; font-size:0.72rem;
+      letter-spacing:0.12em; text-transform:uppercase;
+      color:var(--text-dim); display:flex; align-items:center; gap:8px;
+    }
+    .branding b { color:var(--text-muted); font-weight:500; }
+    .attribution {
+      font-family:ui-monospace,monospace; font-size:0.64rem;
+      letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim);
+      text-align:center;
+    }
+
+    /* ════════════════════════════════════
+       SAFE AREA INSETS
+    ════════════════════════════════════ */
+    .safe-top    { padding-top:    env(safe-area-inset-top,    0px); }
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+    /* ════════════════════════════════════
+       BUTTON SYSTEM
+    ════════════════════════════════════ */
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center;
+      min-width:44px; min-height:44px;
+      border-radius:8px; border:1px solid var(--border);
+      background:var(--bg-raised); color:var(--text-muted);
+      cursor:pointer; flex-shrink:0; user-select:none;
+      -webkit-tap-highlight-color:transparent;
+      transition:background 0.13s, border-color 0.13s, color 0.13s;
+      font-family:inherit;
+    }
+    .btn:hover  { background:var(--bg-hover); color:var(--text); border-color:var(--text-dim); }
+    .btn:active { transform:scale(0.93); }
+    .btn-primary { background:var(--accent-dim); border-color:var(--accent-dim); color:var(--accent); }
+    .btn-primary:hover { background:#14532d; border-color:var(--accent); color:#86efac; }
+    .btn-danger  { color:#f87171; border-color:transparent; }
+    .btn-danger:hover { background:#3f0000; border-color:#7f1d1d; color:#fca5a5; }
+
+    /* ════════════════════════════════════
+       FIELD / INPUT
+    ════════════════════════════════════ */
+    .field {
+      width:100%; background:var(--input-bg); border:1px solid var(--border);
+      border-radius:8px; color:var(--text); font-size:0.9rem;
+      padding:10px 14px; outline:none; transition:border-color 0.2s;
+      font-family:inherit; appearance:none; -webkit-appearance:none;
+    }
+    .field:focus { border-color:var(--accent-dim); }
+    .field::placeholder { color:var(--text-dim); }
+
+    /* ════════════════════════════════════
+       LOBBY
+    ════════════════════════════════════ */
+    #lobby {
+      align-items:center; justify-content:center;
+      position:relative; overflow-y:auto;
+    }
+    .lobby-card {
+      background:var(--bg-raised); border:1px solid var(--border);
+      border-radius:14px; padding:28px;
+      width:100%; max-width:400px;
+    }
+    .divider {
+      display:flex; align-items:center; gap:12px;
+      color:var(--text-dim); font-size:0.7rem;
+      font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase;
+    }
+    .divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    /* ════════════════════════════════════
+       CHAT LAYOUT
+    ════════════════════════════════════ */
+    #chat { overflow:hidden; }
+
+    #chat-header {
+      display:flex; align-items:center; justify-content:space-between; gap:8px;
+      padding:10px 14px; border-bottom:1px solid var(--border);
+      background:var(--bg-raised); flex-shrink:0;
+    }
+
+    #messages {
+      flex:1; overflow-y:auto; overflow-x:hidden;
+      padding:12px; display:flex; flex-direction:column; gap:10px;
+      scroll-behavior:smooth; overscroll-behavior:contain;
+      -webkit-overflow-scrolling:touch;
+    }
+
+    /* ════════════════════════════════════
+       MESSAGE BUBBLES
+    ════════════════════════════════════ */
+    .msg-wrap {
+      display:flex; flex-direction:column; gap:3px; animation:fade-up 0.18s ease forwards;
+    }
+    .msg-wrap.self  { align-items:flex-end; }
+    .msg-wrap.peer  { align-items:flex-start; }
+    .msg-wrap.system { align-items:center; }
+
+    .bubble {
+      max-width:min(82%, 480px); padding:10px 14px;
+      word-break:break-word; white-space:pre-wrap;
+      font-size:0.88rem; line-height:1.55;
+    }
+    .bubble-self {
+      background:var(--self-bg); border:1px solid var(--self-border);
+      border-radius:12px 12px 2px 12px;
+    }
+    .bubble-peer {
+      background:var(--peer-bg); border:1px solid var(--peer-border);
+      border-radius:12px 12px 12px 2px;
+    }
+    .bubble-system {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 14px; border-radius:20px; font-size:0.72rem;
+      font-family:ui-monospace,monospace; letter-spacing:0.04em;
+      color:var(--text-dim); background:var(--bg-raised);
+      border:1px solid var(--border-sub);
+    }
+    .msg-meta {
+      display:flex; align-items:center; gap:6px; padding:0 4px;
+      font-size:0.68rem; font-family:ui-monospace,monospace; color:var(--text-dim);
+    }
+
+    /* Image bubble */
+    .img-bubble {
+      max-width:min(82%, 380px); border-radius:10px;
+      border:1px solid var(--border); overflow:hidden; cursor:zoom-in;
+    }
+    .img-bubble img {
+      width:100%; height:auto; max-height:280px; object-fit:cover;
+      display:block; border:none;
+    }
+
+    /* ════════════════════════════════════
+       INPUT AREA
+    ════════════════════════════════════ */
+    #input-area {
+      flex-shrink:0; background:var(--bg);
+      border-top:1px solid var(--border);
+    }
+    #input-row {
+      display:flex; align-items:flex-end; gap:6px;
+      padding:8px 10px;
+    }
+    #msg-input {
+      flex:1; background:var(--input-bg); border:1px solid var(--border);
+      border-radius:10px; color:var(--text); font-size:0.88rem;
+      padding:10px 12px; resize:none; outline:none; line-height:1.5;
+      min-height:42px; max-height:130px; overflow-y:auto;
+      font-family:inherit; transition:border-color 0.2s;
+      -webkit-appearance:none; appearance:none;
+    }
+    #msg-input:focus { border-color:var(--accent-dim); }
+    #msg-input::placeholder { color:var(--text-dim); }
+
+    /* ── Upload picker popup ── */
+    #upload-menu {
+      position:absolute; bottom:calc(100% + 6px); left:0;
+      background:var(--bg-raised); border:1px solid var(--border);
+      border-radius:10px; overflow:hidden; z-index:200;
+      box-shadow:0 8px 32px rgba(0,0,0,0.55);
+      display:none; min-width:180px;
+      animation:slide-in 0.15s ease forwards;
+    }
+    #upload-menu.open { display:block; }
+    .upload-option {
+      display:flex; align-items:center; gap:10px;
+      padding:11px 14px; cursor:pointer; font-size:0.82rem;
+      color:var(--text-muted); transition:background 0.12s;
+      -webkit-tap-highlight-color:transparent; user-select:none;
+      border:none; background:none; width:100%; font-family:inherit;
+    }
+    .upload-option:hover { background:var(--bg-hover); color:var(--text); }
+    .upload-option:active { background:var(--bg-hover); }
+    .upload-option + .upload-option { border-top:1px solid var(--border-sub); }
+
+    /* ── Typing indicator ── */
+    #typing-bar {
+      min-height:24px; display:flex; align-items:center; gap:6px;
+      padding:0 14px 4px; font-size:0.74rem; font-family:ui-monospace,monospace;
+      color:var(--text-muted); transition:opacity 0.2s;
+    }
+    #typing-inner { display:none; align-items:center; gap:5px; }
+    #typing-inner.show { display:inline-flex; }
+
+    /* ════════════════════════════════════
+       PALETTE SWITCHER
+    ════════════════════════════════════ */
+    .palette-wrap { position:relative; }
+    .palette-panel {
+      position:absolute; top:calc(100% + 6px); right:0;
+      background:var(--bg-raised); border:1px solid var(--border);
+      border-radius:10px; padding:6px; z-index:300; width:196px;
+      box-shadow:0 8px 32px rgba(0,0,0,0.6);
+      display:none; animation:slide-in 0.15s ease forwards;
+    }
+    .palette-panel.open { display:block; }
+    .palette-swatch {
+      display:flex; align-items:center; gap:10px; padding:8px 10px;
+      border-radius:6px; cursor:pointer; font-size:0.78rem;
+      color:var(--text-muted); transition:background 0.12s;
+      -webkit-tap-highlight-color:transparent; user-select:none;
+      border:none; background:none; width:100%; font-family:inherit;
+    }
+    .palette-swatch:hover { background:var(--bg-hover); color:var(--text); }
+    .palette-swatch.active { color:var(--accent); }
+    .swatch-dot { width:13px; height:13px; border-radius:50%; border:1px solid var(--border); flex-shrink:0; }
+
+    /* ════════════════════════════════════
+       ROOM CODE / PEER BADGE
+    ════════════════════════════════════ */
+    .room-code {
+      font-family:ui-monospace,monospace; font-size:1rem;
+      letter-spacing:0.2em; color:var(--accent); font-weight:700;
+    }
+    .peer-badge {
+      display:inline-flex; align-items:center; gap:4px;
+      font-size:0.7rem; font-family:ui-monospace,monospace;
+      color:var(--text-muted); background:var(--bg-hover);
+      border:1px solid var(--border); border-radius:6px; padding:3px 8px;
+    }
+    .conn-tag {
+      font-size:0.68rem; font-family:ui-monospace,monospace;
+      letter-spacing:0.05em; text-transform:uppercase;
+      padding:2px 8px; border-radius:4px; border:1px solid;
+    }
+    .conn-tag.alone      { color:var(--text-dim);  border-color:var(--border);     background:transparent; }
+    .conn-tag.connecting { color:#f59e0b;           border-color:#78350f;           background:#1c1000; }
+    .conn-tag.connected  { color:var(--accent);     border-color:var(--accent-dim); background:var(--self-bg); }
+
+    /* ════════════════════════════════════
+       LIGHTBOX
+    ════════════════════════════════════ */
+    #lightbox {
+      display:none; position:fixed; inset:0; z-index:9999;
+      background:rgba(0,0,0,0.93); align-items:center; justify-content:center;
+      cursor:zoom-out; -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);
+    }
+    #lightbox.open { display:flex; }
+    #lightbox img {
+      max-width:95vw; max-height:92dvh; object-fit:contain;
+      border-radius:8px; border:1px solid var(--border); pointer-events:none;
+      animation:slide-in 0.15s ease forwards;
+    }
+    #lightbox-close {
+      position:absolute; top:16px; right:16px;
+      background:var(--bg-raised); border:1px solid var(--border);
+      border-radius:8px; color:var(--text-muted);
+      width:40px; height:40px; display:flex; align-items:center; justify-content:center;
+      cursor:pointer; transition:background 0.12s;
+      -webkit-tap-highlight-color:transparent;
+    }
+    #lightbox-close:hover { background:var(--bg-hover); color:var(--text); }
+
+    /* ════════════════════════════════════
+       DRAG OVERLAY
+    ════════════════════════════════════ */
+    #drag-overlay {
+      display:none; position:fixed; inset:0; z-index:8888;
+      background:rgba(34,197,94,0.07); border:2px dashed var(--accent);
+      align-items:center; justify-content:center; gap:10px;
+      font-size:1rem; color:var(--accent); letter-spacing:0.08em;
+      font-family:ui-monospace,monospace; pointer-events:none;
+    }
+    #drag-overlay.show { display:flex; }
+
+    /* ════════════════════════════════════
+       TOASTS
+    ════════════════════════════════════ */
+    #toast-container {
+      position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
+      left:50%; transform:translateX(-50%); z-index:7777;
+      display:flex; flex-direction:column-reverse; gap:6px; pointer-events:none;
+    }
+    .toast {
+      background:var(--bg-raised); border:1px solid var(--border);
+      color:var(--text); font-size:0.78rem; padding:8px 16px;
+      border-radius:8px; animation:fade-up 0.18s ease forwards;
+      white-space:nowrap; font-family:ui-monospace,monospace; letter-spacing:0.03em;
+    }
+
+    /* ════════════════════════════════════
+       IMAGE SEND PROGRESS
+    ════════════════════════════════════ */
+    #img-progress {
+      position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
+      right:16px; background:var(--bg-raised); border:1px solid var(--border);
+      border-radius:8px; padding:8px 14px; font-size:0.74rem;
+      font-family:ui-monospace,monospace; color:var(--text-muted);
+      z-index:6666; display:none; animation:fade-up 0.18s ease;
+    }
+
+    /* ════════════════════════════════════
+       FOCUS RINGS (ACCESSIBILITY)
+    ════════════════════════════════════ */
+    :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+    /* ════════════════════════════════════
+       MOBILE COMPACT
+    ════════════════════════════════════ */
+    @media (max-height:520px) {
+      .lobby-card { padding:18px; }
+      #lobby-hero  { display:none; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══════════════════════════════════════
+       LOBBY SCREEN
+  ══════════════════════════════════════ -->
+  <div id="lobby" class="screen active">
+
+    <!-- Top bar -->
+    <div class="safe-top" style="position:absolute;top:0;left:0;right:0;
+         display:flex;align-items:center;justify-content:space-between;padding:14px 16px;z-index:10;">
+      <div class="branding">
+        <span class="pulse-dot"></span>
+        <b>NULLVOID</b>
+        <span style="color:var(--text-dim)">//</span>
+        <b>EPHEMERAL MESH</b>
+      </div>
+      <div class="palette-wrap">
+        <button id="lb-palette-btn" class="btn" style="min-width:40px;min-height:40px;width:40px;height:40px;padding:0;" aria-label="Switch palette">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        </button>
+        <div id="lb-palette-panel" class="palette-panel"></div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+         flex:1;padding:80px 20px 60px;width:100%;max-width:440px;margin:0 auto;gap:28px;">
+
+      <div id="lobby-hero" style="text-align:center;">
+        <h1 style="font-size:2.1rem;font-weight:800;letter-spacing:-0.03em;
+             color:var(--text);line-height:1.1;font-family:ui-monospace,monospace;">
+          NULL<span style="color:var(--accent)">VOID</span>
+        </h1>
+        <p style="margin-top:8px;font-size:0.78rem;color:var(--text-dim);
+             letter-spacing:0.07em;font-family:ui-monospace,monospace;text-transform:uppercase;">
+          No logs. No trace. Pure mesh.
+        </p>
+      </div>
+
+      <div class="lobby-card">
+        <!-- Alias -->
+        <div style="margin-bottom:18px;">
+          <label style="display:block;font-size:0.7rem;font-family:ui-monospace,monospace;
+                 letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;">
+            Your Alias
+          </label>
+          <input id="handle-input" class="field" type="text"
+            placeholder="Leave blank for random alias"
+            autocomplete="off" spellcheck="false" maxlength="24" />
+        </div>
+
+        <!-- Create -->
+        <button id="create-btn" style="width:100%;padding:12px;border-radius:8px;
+               background:var(--accent-dim);border:1px solid var(--accent-dim);
+               color:var(--accent);font-weight:600;font-size:0.9rem;cursor:pointer;
+               letter-spacing:0.02em;transition:background 0.15s,border-color 0.15s;
+               display:flex;align-items:center;justify-content:center;gap:8px;
+               min-height:44px;font-family:inherit;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Create Room
+        </button>
+
+        <div class="divider" style="margin:16px 0;">or join existing</div>
+
+        <!-- Join -->
+        <div style="display:flex;gap:8px;">
+          <input id="join-input" class="field" type="text" placeholder="ROOM CODE" maxlength="6"
+            autocomplete="off" spellcheck="false"
+            style="text-transform:uppercase;letter-spacing:0.2em;font-family:ui-monospace,monospace;font-size:1rem;flex:1;" />
+          <button id="join-btn" class="btn btn-primary" aria-label="Join room">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+        <p id="join-error" style="display:none;margin-top:8px;font-size:0.76rem;
+             font-family:ui-monospace,monospace;color:#f87171;letter-spacing:0.04em;"></p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="safe-bottom" style="position:absolute;bottom:0;left:0;right:0;padding:10px;">
+      <p class="attribution">Developed by Rajendra Singh Bisht</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       CHAT SCREEN
+  ══════════════════════════════════════ -->
+  <div id="chat" class="screen">
+
+    <!-- Header -->
+    <div id="chat-header" class="safe-top">
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:0;overflow:hidden;">
+        <div class="branding">
+          <span class="pulse-dot" id="mesh-dot"></span>
+          <b>NULLVOID</b>
+          <span style="color:var(--text-dim)">//</span>
+          <b>EPHEMERAL MESH</b>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:0.68rem;font-family:ui-monospace,monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;">Room</span>
+          <span id="room-code-disp" class="room-code"></span>
+          <button id="copy-btn" class="btn" style="min-width:28px;min-height:28px;width:28px;height:28px;padding:0;border-radius:5px;" aria-label="Copy room code">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+        <div class="peer-badge">
+          <span style="color:var(--accent);">●</span>
+          <span id="peer-count">1</span>
+          <span>connected</span>
+        </div>
+        <span id="conn-tag" class="conn-tag alone">alone</span>
+        <div class="palette-wrap">
+          <button id="ch-palette-btn" class="btn" style="min-width:36px;min-height:36px;width:36px;height:36px;padding:0;" aria-label="Switch palette">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          </button>
+          <div id="ch-palette-panel" class="palette-panel"></div>
+        </div>
+        <button id="leave-btn" class="btn btn-danger" style="min-width:36px;min-height:36px;width:36px;height:36px;padding:0;" aria-label="Leave room" title="Leave room">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div id="messages"></div>
+
+    <!-- Typing bar -->
+    <div id="typing-bar">
+      <span id="typing-inner">
+        <span id="typing-who" style="color:var(--text-muted);"></span>
+        <span style="color:var(--text-dim);font-size:0.68rem;">is typing</span>
+        <span style="display:inline-flex;gap:3px;align-items:center;margin-left:1px;">
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+        </span>
+      </span>
+    </div>
+
+    <!-- Input area -->
+    <div id="input-area" class="safe-bottom">
+      <div id="input-row">
+
+        <!-- Upload button + popup menu -->
+        <div style="position:relative;">
+          <button id="upload-btn" class="btn" aria-label="Share photo" title="Share photo">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+          </button>
+
+          <!-- Picker popup (camera OR gallery) -->
+          <div id="upload-menu">
+            <button class="upload-option" id="opt-gallery">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Photo Library
+            </button>
+            <button class="upload-option" id="opt-camera">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              Take Photo
+            </button>
+          </div>
+
+          <!-- Hidden file inputs (split: gallery vs camera) -->
+          <input id="file-gallery" type="file" accept="image/*" style="display:none;" />
+          <input id="file-camera"  type="file" accept="image/*" capture="environment" style="display:none;" />
+        </div>
+
+        <textarea id="msg-input" rows="1" placeholder="Message… (Shift+Enter for new line)" aria-label="Message input"></textarea>
+
+        <button id="send-btn" class="btn btn-primary" aria-label="Send message">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+      <div style="padding:2px 12px 6px;text-align:center;">
+        <p class="attribution">Developed by Rajendra Singh Bisht</p>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- Lightbox -->
+<div id="lightbox" role="dialog" aria-modal="true" aria-label="Image viewer">
+  <div id="lightbox-close" aria-label="Close image viewer">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+  </div>
+  <img id="lightbox-img" src="" alt="Shared image" />
+</div>
+
+<!-- Drag overlay -->
+<div id="drag-overlay">
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+  Drop image to share
+</div>
+
+<!-- Toast -->
+<div id="toast-container" aria-live="polite"></div>
+
+<!-- Image send progress -->
+<div id="img-progress">Sending image…</div>
+
+<!-- ══════════════════════════════════════
+     APPLICATION LOGIC
+══════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ── Constants ──────────────────────────────────────────── */
+const ROOM_CHARS        = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const ALIAS_WORDS       = ['null','void','ghost','flux','node','mesh','dark','edge','byte','zero','echo','rift'];
+const PALETTES          = [
+  { id:'zinc',   label:'Zinc / Slate',   color:'#09090b' },
+  { id:'abyss',  label:'Midnight Abyss', color:'#050814' },
+  { id:'forest', label:'Deep Forest',    color:'#07130e' },
+  { id:'violet', label:'Deep Violet',    color:'#0d0b18' },
+  { id:'oled',   label:'Pure OLED',      color:'#000000' },
+];
+const PEERJS_CFG = { host:'0.peerjs.com', port:443, path:'/', secure:true, debug:0 };
+const ICE_CFG    = { iceServers:[
+  { urls:'stun:stun.l.google.com:19302' },
+  { urls:'stun:stun1.l.google.com:19302' },
+  { urls:'stun:stun.stunprotocol.org:3478' },
+]};
+const CHUNK_SIZE       = 16384;  // 16 KB per data-channel chunk
+const MAX_IMG_DIM      = 1600;
+const IMG_QUALITY      = 0.80;
+const TYPING_THROTTLE  = 2000;
+const TYPING_TIMEOUT   = 2500;
+
+/* ── State ─────────────────────────────────────────────── */
+let myPeer      = null;
+let myPeerId    = null;
+let myHandle    = '';
+let roomCode    = '';
+let conns       = new Map();   // peerId → DataConnection
+let imageUrls   = new Set();   // object URLs
+let imgBufs     = {};          // partial image chunk reassembly
+let activePal   = 'zinc';
+let typingTimer = null;
+let typingClear = null;
+let iAmTyping   = false;
+let lastTypeSent= 0;
+let dragCount   = 0;
+let curScreen   = 'lobby';
+let uploadOpen  = false;
+
+/* ── DOM Shortcuts ─────────────────────────────────────── */
+const $  = id => document.getElementById(id);
+const qs = sel => document.querySelector(sel);
+
+const lobbyEl        = $('lobby');
+const chatEl         = $('chat');
+const handleInput    = $('handle-input');
+const createBtn      = $('create-btn');
+const joinInput      = $('join-input');
+const joinBtn        = $('join-btn');
+const joinError      = $('join-error');
+const messagesEl     = $('messages');
+const msgInput       = $('msg-input');
+const sendBtn        = $('send-btn');
+const uploadBtn      = $('upload-btn');
+const uploadMenu     = $('upload-menu');
+const fileGallery    = $('file-gallery');
+const fileCamera     = $('file-camera');
+const optGallery     = $('opt-gallery');
+const optCamera      = $('opt-camera');
+const roomCodeDisp   = $('room-code-disp');
+const copyBtn        = $('copy-btn');
+const peerCountEl    = $('peer-count');
+const connTag        = $('conn-tag');
+const meshDot        = $('mesh-dot');
+const typingInner    = $('typing-inner');
+const typingWho      = $('typing-who');
+const lightbox       = $('lightbox');
+const lightboxImg    = $('lightbox-img');
+const lightboxClose  = $('lightbox-close');
+const dragOverlay    = $('drag-overlay');
+const toastCont      = $('toast-container');
+const imgProgress    = $('img-progress');
+const lbPaletteBtn   = $('lb-palette-btn');
+const lbPalettePanel = $('lb-palette-panel');
+const chPaletteBtn   = $('ch-palette-btn');
+const chPalettePanel = $('ch-palette-panel');
+const leaveBtn       = $('leave-btn');
+
+/* ══════════════════════════════════════════════════════════
+   PALETTE SYSTEM
+══════════════════════════════════════════════════════════ */
+function buildPalette(panelEl) {
+  panelEl.innerHTML = '';
+  PALETTES.forEach(p => {
+    const btn = document.createElement('button');
+    btn.className = 'palette-swatch' + (p.id === activePal ? ' active' : '');
+    btn.setAttribute('role', 'menuitem');
+
+    const dot = document.createElement('span');
+    dot.className = 'swatch-dot';
+    dot.style.background = p.color;
+
+    const lbl = document.createElement('span');
+    lbl.textContent = p.label;
+
+    btn.appendChild(dot);
+    btn.appendChild(lbl);
+    btn.addEventListener('click', () => setPalette(p.id));
+    panelEl.appendChild(btn);
+  });
+}
+
+function setPalette(id) {
+  activePal = id;
+  document.documentElement.dataset.theme = id;
+  closeAllPanels();
+  buildPalette(lbPalettePanel);
+  buildPalette(chPalettePanel);
+}
+
+function togglePalette(panelEl) {
+  const opening = !panelEl.classList.contains('open');
+  closeAllPanels();
+  if (opening) {
+    buildPalette(panelEl);
+    panelEl.classList.add('open');
+  }
+}
+
+function closeAllPanels() {
+  lbPalettePanel.classList.remove('open');
+  chPalettePanel.classList.remove('open');
+  uploadMenu.classList.remove('open');
+  uploadOpen = false;
+}
+
+lbPaletteBtn.addEventListener('click', e => { e.stopPropagation(); togglePalette(lbPalettePanel); });
+chPaletteBtn.addEventListener('click', e => { e.stopPropagation(); togglePalette(chPalettePanel); });
+document.addEventListener('click', closeAllPanels);
+
+/* ══════════════════════════════════════════════════════════
+   UPLOAD MENU (Camera / Gallery)
+══════════════════════════════════════════════════════════ */
+uploadBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  const opening = !uploadMenu.classList.contains('open');
+  closeAllPanels();
+  if (opening) {
+    uploadMenu.classList.add('open');
+    uploadOpen = true;
+  }
+});
+
+// Gallery option — opens photo library (no capture attribute)
+optGallery.addEventListener('click', e => {
+  e.stopPropagation();
+  closeAllPanels();
+  fileGallery.click();
+});
+
+// Camera option — opens live camera
+optCamera.addEventListener('click', e => {
+  e.stopPropagation();
+  closeAllPanels();
+  fileCamera.click();
+});
+
+fileGallery.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) handleImageFile(f);
+  fileGallery.value = '';
+});
+
+fileCamera.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) handleImageFile(f);
+  fileCamera.value = '';
+});
+
+/* ══════════════════════════════════════════════════════════
+   UTILITIES
+══════════════════════════════════════════════════════════ */
+function genRoomCode() {
+  const a = new Uint8Array(6);
+  crypto.getRandomValues(a);
+  return Array.from(a).map(b => ROOM_CHARS[b % ROOM_CHARS.length]).join('');
+}
+
+function genAlias() {
+  const w = ALIAS_WORDS[Math.floor(Math.random() * ALIAS_WORDS.length)];
+  const n = Math.floor(Math.random() * 900) + 100;
+  return `${w}-${n}`;
+}
+
+function safe(str) { return String(str).slice(0, 4000); }
+
+function ts() {
+  return new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:false });
+}
+
+function showToast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  toastCont.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function setJoinError(msg) {
+  joinError.textContent = msg;
+  joinError.style.display = 'block';
+  setTimeout(() => { joinError.style.display = 'none'; }, 3000);
+}
+
+function showScreen(name) {
+  curScreen = name;
+  lobbyEl.classList.toggle('active', name === 'lobby');
+  chatEl.classList.toggle('active', name === 'chat');
+}
+
+function setConnStatus(state) {
+  connTag.className = 'conn-tag ' + state;
+  connTag.textContent = state;
+  meshDot.style.background = state === 'connected' ? 'var(--accent)' : state === 'connecting' ? '#f59e0b' : 'var(--text-dim)';
+}
+
+function updatePeerCount() {
+  peerCountEl.textContent = conns.size + 1;
+}
+
+/* ══════════════════════════════════════════════════════════
+   MESSAGE RENDERING
+══════════════════════════════════════════════════════════ */
+function addMessage({ handle, text, time, isSelf, isSystem, imageUrl }) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-wrap ' + (isSystem ? 'system' : isSelf ? 'self' : 'peer');
+
+  if (isSystem) {
+    const b = document.createElement('div');
+    b.className = 'bubble-system';
+    b.textContent = safe(text);
+    wrap.appendChild(b);
+
+  } else if (imageUrl) {
+    const meta = makeMeta(handle, time);
+    const imgWrap = document.createElement('div');
+    imgWrap.className = 'img-bubble';
+    const img = document.createElement('img');
+    img.src = imageUrl;
+    img.alt = 'Shared image';
+    img.loading = 'lazy';
+    img.addEventListener('click', () => openLightbox(imageUrl));
+    imgWrap.appendChild(img);
+    wrap.appendChild(meta);
+    wrap.appendChild(imgWrap);
+
+  } else {
+    const meta = makeMeta(handle, time);
+    const b = document.createElement('div');
+    b.className = 'bubble ' + (isSelf ? 'bubble-self' : 'bubble-peer');
+    b.textContent = safe(text);
+    wrap.appendChild(meta);
+    wrap.appendChild(b);
+  }
+
+  messagesEl.appendChild(wrap);
+  scrollBottom();
+}
+
+function makeMeta(handle, time) {
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  const n = document.createElement('span');
+  n.textContent = safe(handle);
+  const t = document.createElement('span');
+  t.textContent = time;
+  meta.appendChild(n);
+  meta.appendChild(t);
+  return meta;
+}
+
+function scrollBottom() {
+  requestAnimationFrame(() => { messagesEl.scrollTop = messagesEl.scrollHeight; });
+}
+
+/* ══════════════════════════════════════════════════════════
+   TYPING INDICATORS
+══════════════════════════════════════════════════════════ */
+function showTyping(handle) {
+  typingWho.textContent = safe(handle);
+  typingInner.classList.add('show');
+  clearTimeout(typingClear);
+  typingClear = setTimeout(hideTyping, 3500);
+}
+
+function hideTyping() {
+  typingInner.classList.remove('show');
+}
+
+function broadcastTyping(type) {
+  broadcast({ type, handle: myHandle });
+}
+
+msgInput.addEventListener('input', () => {
+  autoResize();
+  if (curScreen !== 'chat' || conns.size === 0) return;
+  const now = Date.now();
+  if (now - lastTypeSent > TYPING_THROTTLE) {
+    broadcastTyping('typing');
+    lastTypeSent = now;
+    iAmTyping = true;
+  }
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    if (iAmTyping) { broadcastTyping('stop_typing'); iAmTyping = false; }
+  }, TYPING_TIMEOUT);
+});
+
+/* ══════════════════════════════════════════════════════════
+   IMAGE PROCESSING — Canvas downscale + chunked transfer
+══════════════════════════════════════════════════════════ */
+function handleImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    showToast('Only image files are supported.');
+    return;
+  }
+  // Show progress
+  imgProgress.style.display = 'block';
+  imgProgress.textContent = 'Processing image…';
+
+  const reader = new FileReader();
+  reader.onerror = () => { imgProgress.style.display = 'none'; showToast('Could not read image.'); };
+  reader.onload = evt => {
+    const image = new Image();
+    image.onerror = () => { imgProgress.style.display = 'none'; showToast('Invalid image.'); };
+    image.onload = () => {
+      // Downscale via canvas
+      let { width, height } = image;
+      if (width > MAX_IMG_DIM || height > MAX_IMG_DIM) {
+        if (width >= height) { height = Math.round(height * MAX_IMG_DIM / width); width = MAX_IMG_DIM; }
+        else                 { width = Math.round(width * MAX_IMG_DIM / height); height = MAX_IMG_DIM; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0, width, height);
+
+      // Get as JPEG blob
+      canvas.toBlob(blob => {
+        if (!blob) { imgProgress.style.display = 'none'; showToast('Failed to process image.'); return; }
+
+        // Preview locally instantly
+        const localUrl = URL.createObjectURL(blob);
+        imageUrls.add(localUrl);
+        addMessage({ handle: myHandle, time: ts(), isSelf: true, imageUrl: localUrl });
+        imgProgress.style.display = 'none';
+
+        // Transmit via data channel in chunks
+        if (conns.size === 0) {
+          showToast('No peers connected — image shown locally only.');
+          return;
+        }
+        sendImageBlob(blob);
+      }, 'image/jpeg', IMG_QUALITY);
+    };
+    image.src = evt.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function sendImageBlob(blob) {
+  const msgId = crypto.randomUUID();
+  const mimeType = blob.type || 'image/jpeg';
+
+  blob.arrayBuffer().then(ab => {
+    const bytes = new Uint8Array(ab);
+    const total = Math.ceil(bytes.length / CHUNK_SIZE);
+
+    // Send metadata first
+    broadcast({ type:'img_meta', msgId, total, mimeType, handle: myHandle, time: ts() });
+
+    // Send chunks with small delay to avoid congestion
+    let i = 0;
+    function sendNext() {
+      if (i >= total) return;
+      const chunk = bytes.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+      broadcast({ type:'img_chunk', msgId, index: i, data: Array.from(chunk) });
+      i++;
+      // Small yield to keep data channel breathing
+      if (i < total) setTimeout(sendNext, 4);
+    }
+    sendNext();
+  }).catch(() => showToast('Image transfer failed.'));
+}
+
+/* ══════════════════════════════════════════════════════════
+   WEBRTC / PEERJS
+══════════════════════════════════════════════════════════ */
+function initPeer(customId, onReady) {
+  if (myPeer) { try { myPeer.destroy(); } catch(e){} }
+  conns.clear();
+
+  const opts = { ...PEERJS_CFG, config: ICE_CFG };
+  myPeer = customId ? new Peer(customId, opts) : new Peer(opts);
+
+  myPeer.on('open', id => {
+    myPeerId = id;
+    onReady(id);
+  });
+
+  myPeer.on('connection', conn => wireConn(conn));
+
+  myPeer.on('error', err => {
+    console.error('[NullVoid] peer error:', err.type);
+    if (err.type === 'unavailable-id') {
+      // Room ID taken — join as peer instead
+      showToast('Room active — joining as peer…');
+      initPeer(null, () => connectTo('nv-' + roomCode));
+    } else if (curScreen === 'lobby') {
+      setJoinError('Connection failed: ' + err.type);
+    } else {
+      showToast('⚡ ' + err.type);
+    }
+  });
+
+  myPeer.on('disconnected', () => {
+    if (curScreen === 'chat') setTimeout(() => { try { myPeer.reconnect(); } catch(e){} }, 2000);
+  });
+}
+
+function wireConn(conn) {
+  conn.on('open', () => {
+    conns.set(conn.peer, conn);
+    updatePeerCount();
+    setConnStatus('connected');
+    // Announce self
+    conn.send({ type:'hello', handle: myHandle });
+  });
+
+  conn.on('data', data => handleData(conn.peer, data));
+
+  conn.on('close', () => {
+    conns.delete(conn.peer);
+    updatePeerCount();
+    addMessage({ text:'A peer left the void.', isSystem:true });
+    if (conns.size === 0) setConnStatus('alone');
+  });
+
+  conn.on('error', err => {
+    console.error('[NullVoid] conn error:', err);
+    conns.delete(conn.peer);
+    updatePeerCount();
+  });
+}
+
+function connectTo(peerId) {
+  if (conns.has(peerId)) return;
+  const conn = myPeer.connect(peerId, { reliable:true, serialization:'json' });
+  setConnStatus('connecting');
+  wireConn(conn);
+}
+
+function broadcast(data) {
+  conns.forEach(conn => { try { conn.send(data); } catch(e){} });
+}
+
+/* ── Incoming protocol handler ─────────────────────────── */
+function handleData(fromId, data) {
+  if (!data?.type) return;
+  switch (data.type) {
+
+    case 'hello':
+      addMessage({ text: safe(data.handle) + ' entered the void.', isSystem:true });
+      const c = conns.get(fromId);
+      if (c) c.send({ type:'hello_ack', handle: myHandle });
+      break;
+
+    case 'hello_ack':
+      addMessage({ text: safe(data.handle) + ' is here.', isSystem:true });
+      break;
+
+    case 'text':
+      addMessage({ handle: safe(data.handle), text: safe(data.text), time: safe(data.time), isSelf:false });
+      break;
+
+    case 'typing':
+      showTyping(data.handle);
+      break;
+
+    case 'stop_typing':
+      hideTyping();
+      break;
+
+    case 'img_meta':
+      imgBufs[data.msgId] = {
+        chunks:   new Array(data.total),
+        received: 0,
+        total:    data.total,
+        mime:     data.mimeType,
+        handle:   data.handle,
+        time:     data.time,
+      };
+      break;
+
+    case 'img_chunk': {
+      const buf = imgBufs[data.msgId];
+      if (!buf) break;
+      buf.chunks[data.index] = new Uint8Array(data.data);
+      buf.received++;
+      if (buf.received === buf.total) {
+        // Reassemble
+        const len    = buf.chunks.reduce((s, c) => s + c.length, 0);
+        const merged = new Uint8Array(len);
+        let off = 0;
+        buf.chunks.forEach(c => { merged.set(c, off); off += c.length; });
+        const blob   = new Blob([merged], { type: buf.mime });
+        const url    = URL.createObjectURL(blob);
+        imageUrls.add(url);
+        addMessage({ handle: buf.handle, time: buf.time, isSelf:false, imageUrl: url });
+        delete imgBufs[data.msgId];
+      }
+      break;
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   ROOM MANAGEMENT
+══════════════════════════════════════════════════════════ */
+function enterRoom(code, asCreator) {
+  roomCode  = code.toUpperCase();
+  myHandle  = handleInput.value.trim().slice(0,24) || genAlias();
+
+  roomCodeDisp.textContent = roomCode;
+  showScreen('chat');
+  setConnStatus('alone');
+  updatePeerCount();
+
+  addMessage({ text: 'You entered the void. Room: ' + roomCode, isSystem:true });
+  addMessage({ text: 'Alias: ' + myHandle, isSystem:true });
+  addMessage({ text: 'Share the room code to invite peers.', isSystem:true });
+
+  if (asCreator) {
+    // Try to claim the well-known room peer ID
+    initPeer('nv-' + roomCode, () => {
+      showToast('Room ready — share code: ' + roomCode);
+    });
+  } else {
+    // Joiner: get random peer ID then connect to creator
+    initPeer(null, () => {
+      connectTo('nv-' + roomCode);
+    });
+  }
+}
+
+function leaveRoom() {
+  conns.forEach(c => { try { c.close(); } catch(e){} });
+  conns.clear();
+  if (myPeer) { try { myPeer.destroy(); } catch(e){} myPeer = null; }
+
+  // Revoke all image object URLs
+  imageUrls.forEach(u => URL.revokeObjectURL(u));
+  imageUrls.clear();
+  imgBufs = {};
+
+  // Reset typing state
+  hideTyping();
+  clearTimeout(typingTimer);
+  clearTimeout(typingClear);
+  iAmTyping = false;
+  lastTypeSent = 0;
+
+  messagesEl.innerHTML = '';
+  msgInput.value = '';
+  autoResize();
+  roomCode = '';
+  myPeerId = null;
+
+  showScreen('lobby');
+}
+
+/* ══════════════════════════════════════════════════════════
+   SEND TEXT MESSAGE
+══════════════════════════════════════════════════════════ */
+function sendMessage() {
+  const text = msgInput.value.trim();
+  if (!text) return;
+
+  const time = ts();
+  addMessage({ handle: myHandle, text, time, isSelf:true });
+  broadcast({ type:'text', handle: myHandle, text, time });
+
+  msgInput.value = '';
+  autoResize();
+
+  if (iAmTyping) {
+    broadcastTyping('stop_typing');
+    iAmTyping = false;
+    clearTimeout(typingTimer);
+    lastTypeSent = 0;
+  }
+  msgInput.focus();
+}
+
+/* ══════════════════════════════════════════════════════════
+   TEXTAREA AUTO-RESIZE
+══════════════════════════════════════════════════════════ */
+function autoResize() {
+  msgInput.style.height = 'auto';
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 130) + 'px';
+}
+
+/* ══════════════════════════════════════════════════════════
+   LIGHTBOX
+══════════════════════════════════════════════════════════ */
+function openLightbox(url) {
+  lightboxImg.src = url;
+  lightbox.classList.add('open');
+}
+
+function closeLightbox() {
+  lightbox.classList.remove('open');
+  lightboxImg.src = '';
+}
+
+lightbox.addEventListener('click', e => { if (e.target === lightbox || e.target === lightboxImg) closeLightbox(); });
+lightboxClose.addEventListener('click', closeLightbox);
+
+/* ══════════════════════════════════════════════════════════
+   COPY ROOM CODE
+══════════════════════════════════════════════════════════ */
+copyBtn.addEventListener('click', () => {
+  if (!roomCode) return;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(roomCode)
+      .then(() => showToast('Copied: ' + roomCode))
+      .catch(() => fallbackCopy(roomCode));
+  } else {
+    fallbackCopy(roomCode);
+  }
+});
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  Object.assign(ta.style, { position:'fixed', opacity:'0', top:'0', left:'0' });
+  document.body.appendChild(ta);
+  ta.focus(); ta.select();
+  try { document.execCommand('copy'); showToast('Copied: ' + text); } catch(e){}
+  ta.remove();
+}
+
+/* ══════════════════════════════════════════════════════════
+   CLIPBOARD PASTE (Ctrl+V image)
+══════════════════════════════════════════════════════════ */
+document.addEventListener('paste', e => {
+  if (curScreen !== 'chat') return;
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      handleImageFile(item.getAsFile());
+      return;
+    }
+  }
+});
+
+/* ══════════════════════════════════════════════════════════
+   DRAG AND DROP
+══════════════════════════════════════════════════════════ */
+document.addEventListener('dragenter', e => {
+  e.preventDefault();
+  if (curScreen !== 'chat') return;
+  dragCount++;
+  dragOverlay.classList.add('show');
+});
+document.addEventListener('dragleave', () => {
+  dragCount = Math.max(0, dragCount - 1);
+  if (dragCount === 0) dragOverlay.classList.remove('show');
+});
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  dragCount = 0;
+  dragOverlay.classList.remove('show');
+  if (curScreen !== 'chat') return;
+  const file = e.dataTransfer?.files[0];
+  if (file) handleImageFile(file);
+});
+
+/* ══════════════════════════════════════════════════════════
+   LOBBY EVENT WIRING
+══════════════════════════════════════════════════════════ */
+createBtn.addEventListener('click', () => enterRoom(genRoomCode(), true));
+
+joinBtn.addEventListener('click', () => {
+  const code = joinInput.value.trim().toUpperCase();
+  if (code.length !== 6) { setJoinError('Enter a 6-character room code.'); return; }
+  joinInput.value = '';
+  enterRoom(code, false);
+});
+
+joinInput.addEventListener('input', e => {
+  e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
+  joinError.style.display = 'none';
+});
+joinInput.addEventListener('keydown', e => { if (e.key === 'Enter') joinBtn.click(); });
+handleInput.addEventListener('keydown', e => { if (e.key === 'Enter') createBtn.click(); });
+
+/* ══════════════════════════════════════════════════════════
+   CHAT EVENT WIRING
+══════════════════════════════════════════════════════════ */
+sendBtn.addEventListener('click', sendMessage);
+leaveBtn.addEventListener('click', leaveRoom);
+
+msgInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+/* ══════════════════════════════════════════════════════════
+   GLOBAL KEYBOARD
+══════════════════════════════════════════════════════════ */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeLightbox();
+    closeAllPanels();
+  }
+});
+
+/* ══════════════════════════════════════════════════════════
+   CLEANUP ON UNLOAD / BACK
+══════════════════════════════════════════════════════════ */
+window.addEventListener('beforeunload', () => {
+  conns.forEach(c => { try { c.close(); } catch(e){} });
+  if (myPeer) { try { myPeer.destroy(); } catch(e){} }
+  imageUrls.forEach(u => URL.revokeObjectURL(u));
+});
+window.addEventListener('popstate', leaveRoom);
+
+/* ══════════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════════ */
+// Prevent iOS double-tap zoom
+let lastTap = 0;
+document.addEventListener('touchend', e => {
+  const now = Date.now();
+  if (now - lastTap < 280) e.preventDefault();
+  lastTap = now;
+}, { passive: false });
+
+autoResize();
+
+console.log(
+  '%c NULLVOID // EPHEMERAL MESH ',
+  'background:#09090b;color:#22c55e;font-family:monospace;font-size:13px;padding:4px 10px;border:1px solid #166534;border-radius:4px;'
+);
+</script>
+</body>
+</html>
