@@ -7,543 +7,291 @@
   <meta name="description" content="NullVoid — Ephemeral P2P Mesh Chat. No logs. No trace. No backend." />
   <title>NullVoid // Ephemeral Mesh</title>
 
-  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- PeerJS WebRTC -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
   <style>
-    /* ════════════════════════════════════
-       CSS CUSTOM PROPERTIES — THEME ENGINE
-    ════════════════════════════════════ */
+    /* ── Theme Variables ── */
     :root {
-      --bg:          #09090b;
-      --bg-raised:   #111113;
-      --bg-hover:    #18181b;
-      --border:      #27272a;
-      --border-sub:  #1f1f22;
-      --text:        #f4f4f5;
-      --text-muted:  #a1a1aa;
-      --text-dim:    #52525b;
-      --accent:      #22c55e;
-      --accent-dim:  #166534;
-      --self-bg:     #1a2e1a;
-      --self-border: #166534;
-      --peer-bg:     #18181b;
-      --peer-border: #27272a;
-      --input-bg:    #111113;
+      --bg:#09090b; --bg-raised:#111113; --bg-hover:#18181b;
+      --border:#27272a; --border-sub:#1f1f22;
+      --text:#f4f4f5; --text-muted:#a1a1aa; --text-dim:#52525b;
+      --accent:#22c55e; --accent-dim:#166534;
+      --self-bg:#1a2e1a; --self-border:#166534;
+      --peer-bg:#18181b; --peer-border:#27272a;
+      --input-bg:#111113;
     }
-
     [data-theme="zinc"]   { --bg:#09090b; --bg-raised:#111113; --bg-hover:#18181b; --border:#27272a; --border-sub:#1f1f22; --input-bg:#111113; }
     [data-theme="abyss"]  { --bg:#050814; --bg-raised:#090d1c; --bg-hover:#0e1228; --border:#1a1f3a; --border-sub:#141830; --input-bg:#090d1c; }
     [data-theme="forest"] { --bg:#07130e; --bg-raised:#0c1f15; --bg-hover:#112a1c; --border:#1a3323; --border-sub:#142a1c; --input-bg:#0c1f15; }
     [data-theme="violet"] { --bg:#0d0b18; --bg-raised:#151221; --bg-hover:#1c1830; --border:#2a2540; --border-sub:#201d35; --input-bg:#151221; }
     [data-theme="oled"]   { --bg:#000000; --bg-raised:#0a0a0a; --bg-hover:#111111; --border:#222222; --border-sub:#181818; --input-bg:#0a0a0a; }
 
-    /* ════════════════════════════════════
-       RESET & BASE
-    ════════════════════════════════════ */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ── Reset ── */
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);color:var(--text);
+      font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
+      -webkit-font-smoothing:antialiased}
+    #app{width:100%;height:100dvh;display:flex;flex-direction:column;
+      background:var(--bg);transition:background .3s ease;overflow:hidden}
 
-    html, body {
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-      background: var(--bg);
-      color: var(--text);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      -webkit-font-smoothing: antialiased;
-    }
+    /* ── Screens ── */
+    .screen{display:none;width:100%;flex:1;flex-direction:column;overflow:hidden}
+    .screen.active{display:flex}
 
-    #app {
-      width: 100%;
-      height: 100dvh;
-      display: flex;
-      flex-direction: column;
-      background: var(--bg);
-      transition: background 0.3s ease;
-      overflow: hidden;
-    }
+    /* ── Animations ── */
+    @keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.8)}}
+    @keyframes bounce{0%,80%,100%{transform:translateY(0);opacity:.45}40%{transform:translateY(-5px);opacity:1}}
+    @keyframes fade-up{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes pop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
 
-    /* ════════════════════════════════════
-       SCREEN ROUTER
-    ════════════════════════════════════ */
-    .screen { display: none; width: 100%; flex: 1; flex-direction: column; overflow: hidden; }
-    .screen.active { display: flex; }
+    .pulse-dot{display:inline-block;width:7px;height:7px;border-radius:50%;
+      background:var(--accent);animation:pulse-dot 2s ease-in-out infinite;flex-shrink:0}
+    .typing-dot{display:inline-block;width:5px;height:5px;border-radius:50%;
+      background:var(--text-muted);animation:bounce 1.2s ease-in-out infinite}
+    .typing-dot:nth-child(2){animation-delay:.2s}
+    .typing-dot:nth-child(3){animation-delay:.4s}
+    .fade-up{animation:fade-up .18s ease forwards}
 
-    /* ════════════════════════════════════
-       ANIMATIONS
-    ════════════════════════════════════ */
-    @keyframes pulse-dot {
-      0%,100% { opacity:1; transform:scale(1); }
-      50%      { opacity:0.55; transform:scale(0.8); }
-    }
-    @keyframes bounce-dot {
-      0%,80%,100% { transform:translateY(0); opacity:0.45; }
-      40%          { transform:translateY(-5px); opacity:1; }
-    }
-    @keyframes fade-up {
-      from { opacity:0; transform:translateY(5px); }
-      to   { opacity:1; transform:translateY(0); }
-    }
-    @keyframes slide-in {
-      from { opacity:0; transform:scale(0.97); }
-      to   { opacity:1; transform:scale(1); }
-    }
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar{width:4px;height:4px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+    *{scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 
-    .pulse-dot {
-      display:inline-block; width:7px; height:7px; border-radius:50%;
-      background:var(--accent); animation:pulse-dot 2s ease-in-out infinite;
-      flex-shrink:0;
-    }
-    .typing-dot {
-      display:inline-block; width:5px; height:5px; border-radius:50%;
-      background:var(--text-muted); animation:bounce-dot 1.2s ease-in-out infinite;
-    }
-    .typing-dot:nth-child(2) { animation-delay:0.2s; }
-    .typing-dot:nth-child(3) { animation-delay:0.4s; }
+    /* ── Shared typography ── */
+    .branding{font-family:ui-monospace,monospace;font-size:.72rem;letter-spacing:.12em;
+      text-transform:uppercase;color:var(--text-dim);display:flex;align-items:center;gap:8px}
+    .branding b{color:var(--text-muted);font-weight:500}
+    .attribution{font-family:ui-monospace,monospace;font-size:.64rem;
+      letter-spacing:.16em;text-transform:uppercase;color:var(--text-dim);text-align:center}
+    .safe-top{padding-top:env(safe-area-inset-top,0px)}
+    .safe-bottom{padding-bottom:env(safe-area-inset-bottom,0px)}
 
-    .fade-up { animation:fade-up 0.18s ease forwards; }
+    /* ── Buttons ── */
+    .btn{display:inline-flex;align-items:center;justify-content:center;
+      min-width:44px;min-height:44px;border-radius:8px;border:1px solid var(--border);
+      background:var(--bg-raised);color:var(--text-muted);cursor:pointer;flex-shrink:0;
+      user-select:none;-webkit-tap-highlight-color:transparent;
+      transition:background .13s,border-color .13s,color .13s;font-family:inherit}
+    .btn:hover{background:var(--bg-hover);color:var(--text);border-color:var(--text-dim)}
+    .btn:active{transform:scale(.93)}
+    .btn-primary{background:var(--accent-dim);border-color:var(--accent-dim);color:var(--accent)}
+    .btn-primary:hover{background:#14532d;border-color:var(--accent);color:#86efac}
+    .btn-danger{color:#f87171;border-color:transparent}
+    .btn-danger:hover{background:#3f0000;border-color:#7f1d1d;color:#fca5a5}
 
-    /* ════════════════════════════════════
-       SCROLLBAR
-    ════════════════════════════════════ */
-    ::-webkit-scrollbar { width:4px; height:4px; }
-    ::-webkit-scrollbar-track { background:transparent; }
-    ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
-    * { scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+    /* ── Field ── */
+    .field{width:100%;background:var(--input-bg);border:1px solid var(--border);
+      border-radius:8px;color:var(--text);font-size:.9rem;padding:10px 14px;outline:none;
+      transition:border-color .2s;font-family:inherit;appearance:none;-webkit-appearance:none}
+    .field:focus{border-color:var(--accent-dim)}
+    .field::placeholder{color:var(--text-dim)}
 
-    /* ════════════════════════════════════
-       TYPOGRAPHY UTILS
-    ════════════════════════════════════ */
-    .mono { font-family:ui-monospace,'Cascadia Code','Fira Code',Menlo,monospace; }
-    .branding {
-      font-family:ui-monospace,monospace; font-size:0.72rem;
-      letter-spacing:0.12em; text-transform:uppercase;
-      color:var(--text-dim); display:flex; align-items:center; gap:8px;
-    }
-    .branding b { color:var(--text-muted); font-weight:500; }
-    .attribution {
-      font-family:ui-monospace,monospace; font-size:0.64rem;
-      letter-spacing:0.16em; text-transform:uppercase; color:var(--text-dim);
-      text-align:center;
-    }
+    /* ── Lobby ── */
+    #lobby{align-items:center;justify-content:center;position:relative;overflow-y:auto}
+    .lobby-card{background:var(--bg-raised);border:1px solid var(--border);
+      border-radius:14px;padding:28px;width:100%;max-width:400px}
+    .divider{display:flex;align-items:center;gap:12px;color:var(--text-dim);font-size:.7rem;
+      font-family:ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase}
+    .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
 
-    /* ════════════════════════════════════
-       SAFE AREA INSETS
-    ════════════════════════════════════ */
-    .safe-top    { padding-top:    env(safe-area-inset-top,    0px); }
-    .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    /* ── Chat ── */
+    #chat{overflow:hidden}
+    #chat-header{display:flex;align-items:center;justify-content:space-between;gap:8px;
+      padding:10px 14px;border-bottom:1px solid var(--border);
+      background:var(--bg-raised);flex-shrink:0}
+    #messages{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px;
+      display:flex;flex-direction:column;gap:10px;
+      scroll-behavior:smooth;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 
-    /* ════════════════════════════════════
-       BUTTON SYSTEM
-    ════════════════════════════════════ */
-    .btn {
-      display:inline-flex; align-items:center; justify-content:center;
-      min-width:44px; min-height:44px;
-      border-radius:8px; border:1px solid var(--border);
-      background:var(--bg-raised); color:var(--text-muted);
-      cursor:pointer; flex-shrink:0; user-select:none;
-      -webkit-tap-highlight-color:transparent;
-      transition:background 0.13s, border-color 0.13s, color 0.13s;
-      font-family:inherit;
-    }
-    .btn:hover  { background:var(--bg-hover); color:var(--text); border-color:var(--text-dim); }
-    .btn:active { transform:scale(0.93); }
-    .btn-primary { background:var(--accent-dim); border-color:var(--accent-dim); color:var(--accent); }
-    .btn-primary:hover { background:#14532d; border-color:var(--accent); color:#86efac; }
-    .btn-danger  { color:#f87171; border-color:transparent; }
-    .btn-danger:hover { background:#3f0000; border-color:#7f1d1d; color:#fca5a5; }
+    /* ── Message bubbles ── */
+    .msg-wrap{display:flex;flex-direction:column;gap:3px;animation:fade-up .18s ease forwards}
+    .msg-wrap.self{align-items:flex-end}
+    .msg-wrap.peer{align-items:flex-start}
+    .msg-wrap.system{align-items:center}
+    .bubble{max-width:min(82%,480px);padding:10px 14px;word-break:break-word;
+      white-space:pre-wrap;font-size:.88rem;line-height:1.55}
+    .bubble-self{background:var(--self-bg);border:1px solid var(--self-border);
+      border-radius:12px 12px 2px 12px}
+    .bubble-peer{background:var(--peer-bg);border:1px solid var(--peer-border);
+      border-radius:12px 12px 12px 2px}
+    .bubble-system{display:inline-flex;align-items:center;gap:6px;padding:4px 14px;
+      border-radius:20px;font-size:.72rem;font-family:ui-monospace,monospace;
+      letter-spacing:.04em;color:var(--text-dim);background:var(--bg-raised);
+      border:1px solid var(--border-sub)}
+    .msg-meta{display:flex;align-items:center;gap:6px;padding:0 4px;
+      font-size:.68rem;font-family:ui-monospace,monospace;color:var(--text-dim)}
+    .img-bubble{max-width:min(82%,360px);border-radius:10px;
+      border:1px solid var(--border);overflow:hidden;cursor:zoom-in}
+    .img-bubble img{width:100%;height:auto;max-height:260px;object-fit:cover;display:block}
 
-    /* ════════════════════════════════════
-       FIELD / INPUT
-    ════════════════════════════════════ */
-    .field {
-      width:100%; background:var(--input-bg); border:1px solid var(--border);
-      border-radius:8px; color:var(--text); font-size:0.9rem;
-      padding:10px 14px; outline:none; transition:border-color 0.2s;
-      font-family:inherit; appearance:none; -webkit-appearance:none;
-    }
-    .field:focus { border-color:var(--accent-dim); }
-    .field::placeholder { color:var(--text-dim); }
+    /* ── Input area ── */
+    #input-area{flex-shrink:0;background:var(--bg);border-top:1px solid var(--border)}
+    #input-row{display:flex;align-items:flex-end;gap:6px;padding:8px 10px}
+    #msg-input{flex:1;background:var(--input-bg);border:1px solid var(--border);
+      border-radius:10px;color:var(--text);font-size:.88rem;padding:10px 12px;
+      resize:none;outline:none;line-height:1.5;min-height:42px;max-height:130px;
+      overflow-y:auto;font-family:inherit;transition:border-color .2s;
+      -webkit-appearance:none;appearance:none}
+    #msg-input:focus{border-color:var(--accent-dim)}
+    #msg-input::placeholder{color:var(--text-dim)}
 
-    /* ════════════════════════════════════
-       LOBBY
-    ════════════════════════════════════ */
-    #lobby {
-      align-items:center; justify-content:center;
-      position:relative; overflow-y:auto;
-    }
-    .lobby-card {
-      background:var(--bg-raised); border:1px solid var(--border);
-      border-radius:14px; padding:28px;
-      width:100%; max-width:400px;
-    }
-    .divider {
-      display:flex; align-items:center; gap:12px;
-      color:var(--text-dim); font-size:0.7rem;
-      font-family:ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase;
-    }
-    .divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
+    /* ── Upload menu ── */
+    #upload-menu{position:absolute;bottom:calc(100% + 6px);left:0;
+      background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;
+      overflow:hidden;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,.55);
+      display:none;min-width:180px;animation:pop .15s ease forwards}
+    #upload-menu.open{display:block}
+    .upload-opt{display:flex;align-items:center;gap:10px;padding:12px 14px;
+      cursor:pointer;font-size:.82rem;color:var(--text-muted);transition:background .12s;
+      -webkit-tap-highlight-color:transparent;user-select:none;border:none;
+      background:none;width:100%;font-family:inherit;text-align:left}
+    .upload-opt:hover{background:var(--bg-hover);color:var(--text)}
+    .upload-opt+.upload-opt{border-top:1px solid var(--border-sub)}
 
-    /* ════════════════════════════════════
-       CHAT LAYOUT
-    ════════════════════════════════════ */
-    #chat { overflow:hidden; }
+    /* ── Typing bar ── */
+    #typing-bar{min-height:24px;display:flex;align-items:center;gap:6px;
+      padding:0 14px 4px;font-size:.74rem;font-family:ui-monospace,monospace;
+      color:var(--text-muted)}
+    #typing-inner{display:none;align-items:center;gap:5px}
+    #typing-inner.show{display:inline-flex}
 
-    #chat-header {
-      display:flex; align-items:center; justify-content:space-between; gap:8px;
-      padding:10px 14px; border-bottom:1px solid var(--border);
-      background:var(--bg-raised); flex-shrink:0;
-    }
+    /* ── Palette switcher ── */
+    .pal-wrap{position:relative}
+    .pal-panel{position:absolute;top:calc(100% + 6px);right:0;
+      background:var(--bg-raised);border:1px solid var(--border);border-radius:10px;
+      padding:6px;z-index:300;width:196px;box-shadow:0 8px 32px rgba(0,0,0,.6);
+      display:none;animation:pop .15s ease forwards}
+    .pal-panel.open{display:block}
+    .pal-swatch{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;
+      cursor:pointer;font-size:.78rem;color:var(--text-muted);transition:background .12s;
+      -webkit-tap-highlight-color:transparent;user-select:none;border:none;
+      background:none;width:100%;font-family:inherit}
+    .pal-swatch:hover{background:var(--bg-hover);color:var(--text)}
+    .pal-swatch.active{color:var(--accent)}
+    .swatch-dot{width:13px;height:13px;border-radius:50%;border:1px solid var(--border);flex-shrink:0}
 
-    #messages {
-      flex:1; overflow-y:auto; overflow-x:hidden;
-      padding:12px; display:flex; flex-direction:column; gap:10px;
-      scroll-behavior:smooth; overscroll-behavior:contain;
-      -webkit-overflow-scrolling:touch;
-    }
+    /* ── Room / peer badges ── */
+    .room-code{font-family:ui-monospace,monospace;font-size:1rem;
+      letter-spacing:.2em;color:var(--accent);font-weight:700}
+    .peer-badge{display:inline-flex;align-items:center;gap:4px;font-size:.7rem;
+      font-family:ui-monospace,monospace;color:var(--text-muted);background:var(--bg-hover);
+      border:1px solid var(--border);border-radius:6px;padding:3px 8px}
+    .conn-tag{font-size:.68rem;font-family:ui-monospace,monospace;letter-spacing:.05em;
+      text-transform:uppercase;padding:2px 8px;border-radius:4px;border:1px solid}
+    .conn-tag.alone{color:var(--text-dim);border-color:var(--border);background:transparent}
+    .conn-tag.connecting{color:#f59e0b;border-color:#78350f;background:#1c1000}
+    .conn-tag.connected{color:var(--accent);border-color:var(--accent-dim);background:var(--self-bg)}
 
-    /* ════════════════════════════════════
-       MESSAGE BUBBLES
-    ════════════════════════════════════ */
-    .msg-wrap {
-      display:flex; flex-direction:column; gap:3px; animation:fade-up 0.18s ease forwards;
-    }
-    .msg-wrap.self  { align-items:flex-end; }
-    .msg-wrap.peer  { align-items:flex-start; }
-    .msg-wrap.system { align-items:center; }
+    /* ── Lightbox ── */
+    #lightbox{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.93);
+      align-items:center;justify-content:center;cursor:zoom-out;
+      -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+    #lightbox.open{display:flex}
+    #lightbox img{max-width:95vw;max-height:92dvh;object-fit:contain;border-radius:8px;
+      border:1px solid var(--border);pointer-events:none;animation:pop .15s ease forwards}
+    #lb-close{position:absolute;top:16px;right:16px;background:var(--bg-raised);
+      border:1px solid var(--border);border-radius:8px;color:var(--text-muted);
+      width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+      cursor:pointer;transition:background .12s;-webkit-tap-highlight-color:transparent}
+    #lb-close:hover{background:var(--bg-hover);color:var(--text)}
 
-    .bubble {
-      max-width:min(82%, 480px); padding:10px 14px;
-      word-break:break-word; white-space:pre-wrap;
-      font-size:0.88rem; line-height:1.55;
-    }
-    .bubble-self {
-      background:var(--self-bg); border:1px solid var(--self-border);
-      border-radius:12px 12px 2px 12px;
-    }
-    .bubble-peer {
-      background:var(--peer-bg); border:1px solid var(--peer-border);
-      border-radius:12px 12px 12px 2px;
-    }
-    .bubble-system {
-      display:inline-flex; align-items:center; gap:6px;
-      padding:4px 14px; border-radius:20px; font-size:0.72rem;
-      font-family:ui-monospace,monospace; letter-spacing:0.04em;
-      color:var(--text-dim); background:var(--bg-raised);
-      border:1px solid var(--border-sub);
-    }
-    .msg-meta {
-      display:flex; align-items:center; gap:6px; padding:0 4px;
-      font-size:0.68rem; font-family:ui-monospace,monospace; color:var(--text-dim);
-    }
+    /* ── Drag overlay ── */
+    #drag-overlay{display:none;position:fixed;inset:0;z-index:8888;
+      background:rgba(34,197,94,.07);border:2px dashed var(--accent);
+      align-items:center;justify-content:center;gap:10px;font-size:1rem;
+      color:var(--accent);letter-spacing:.08em;font-family:ui-monospace,monospace;
+      pointer-events:none}
+    #drag-overlay.show{display:flex}
 
-    /* Image bubble */
-    .img-bubble {
-      max-width:min(82%, 380px); border-radius:10px;
-      border:1px solid var(--border); overflow:hidden; cursor:zoom-in;
-    }
-    .img-bubble img {
-      width:100%; height:auto; max-height:280px; object-fit:cover;
-      display:block; border:none;
-    }
+    /* ── Toasts ── */
+    #toast-cont{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
+      left:50%;transform:translateX(-50%);z-index:7777;
+      display:flex;flex-direction:column-reverse;gap:6px;pointer-events:none}
+    .toast{background:var(--bg-raised);border:1px solid var(--border);color:var(--text);
+      font-size:.78rem;padding:8px 16px;border-radius:8px;animation:fade-up .18s ease forwards;
+      white-space:nowrap;font-family:ui-monospace,monospace;letter-spacing:.03em}
 
-    /* ════════════════════════════════════
-       INPUT AREA
-    ════════════════════════════════════ */
-    #input-area {
-      flex-shrink:0; background:var(--bg);
-      border-top:1px solid var(--border);
-    }
-    #input-row {
-      display:flex; align-items:flex-end; gap:6px;
-      padding:8px 10px;
-    }
-    #msg-input {
-      flex:1; background:var(--input-bg); border:1px solid var(--border);
-      border-radius:10px; color:var(--text); font-size:0.88rem;
-      padding:10px 12px; resize:none; outline:none; line-height:1.5;
-      min-height:42px; max-height:130px; overflow-y:auto;
-      font-family:inherit; transition:border-color 0.2s;
-      -webkit-appearance:none; appearance:none;
-    }
-    #msg-input:focus { border-color:var(--accent-dim); }
-    #msg-input::placeholder { color:var(--text-dim); }
+    /* ── Image progress ── */
+    #img-prog{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 76px);right:16px;
+      background:var(--bg-raised);border:1px solid var(--border);border-radius:8px;
+      padding:8px 14px;font-size:.74rem;font-family:ui-monospace,monospace;
+      color:var(--text-muted);z-index:6666;display:none;animation:fade-up .18s ease}
 
-    /* ── Upload picker popup ── */
-    #upload-menu {
-      position:absolute; bottom:calc(100% + 6px); left:0;
-      background:var(--bg-raised); border:1px solid var(--border);
-      border-radius:10px; overflow:hidden; z-index:200;
-      box-shadow:0 8px 32px rgba(0,0,0,0.55);
-      display:none; min-width:180px;
-      animation:slide-in 0.15s ease forwards;
-    }
-    #upload-menu.open { display:block; }
-    .upload-option {
-      display:flex; align-items:center; gap:10px;
-      padding:11px 14px; cursor:pointer; font-size:0.82rem;
-      color:var(--text-muted); transition:background 0.12s;
-      -webkit-tap-highlight-color:transparent; user-select:none;
-      border:none; background:none; width:100%; font-family:inherit;
-    }
-    .upload-option:hover { background:var(--bg-hover); color:var(--text); }
-    .upload-option:active { background:var(--bg-hover); }
-    .upload-option + .upload-option { border-top:1px solid var(--border-sub); }
+    /* ── Focus rings ── */
+    :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-    /* ── Typing indicator ── */
-    #typing-bar {
-      min-height:24px; display:flex; align-items:center; gap:6px;
-      padding:0 14px 4px; font-size:0.74rem; font-family:ui-monospace,monospace;
-      color:var(--text-muted); transition:opacity 0.2s;
-    }
-    #typing-inner { display:none; align-items:center; gap:5px; }
-    #typing-inner.show { display:inline-flex; }
-
-    /* ════════════════════════════════════
-       PALETTE SWITCHER
-    ════════════════════════════════════ */
-    .palette-wrap { position:relative; }
-    .palette-panel {
-      position:absolute; top:calc(100% + 6px); right:0;
-      background:var(--bg-raised); border:1px solid var(--border);
-      border-radius:10px; padding:6px; z-index:300; width:196px;
-      box-shadow:0 8px 32px rgba(0,0,0,0.6);
-      display:none; animation:slide-in 0.15s ease forwards;
-    }
-    .palette-panel.open { display:block; }
-    .palette-swatch {
-      display:flex; align-items:center; gap:10px; padding:8px 10px;
-      border-radius:6px; cursor:pointer; font-size:0.78rem;
-      color:var(--text-muted); transition:background 0.12s;
-      -webkit-tap-highlight-color:transparent; user-select:none;
-      border:none; background:none; width:100%; font-family:inherit;
-    }
-    .palette-swatch:hover { background:var(--bg-hover); color:var(--text); }
-    .palette-swatch.active { color:var(--accent); }
-    .swatch-dot { width:13px; height:13px; border-radius:50%; border:1px solid var(--border); flex-shrink:0; }
-
-    /* ════════════════════════════════════
-       ROOM CODE / PEER BADGE
-    ════════════════════════════════════ */
-    .room-code {
-      font-family:ui-monospace,monospace; font-size:1rem;
-      letter-spacing:0.2em; color:var(--accent); font-weight:700;
-    }
-    .peer-badge {
-      display:inline-flex; align-items:center; gap:4px;
-      font-size:0.7rem; font-family:ui-monospace,monospace;
-      color:var(--text-muted); background:var(--bg-hover);
-      border:1px solid var(--border); border-radius:6px; padding:3px 8px;
-    }
-    .conn-tag {
-      font-size:0.68rem; font-family:ui-monospace,monospace;
-      letter-spacing:0.05em; text-transform:uppercase;
-      padding:2px 8px; border-radius:4px; border:1px solid;
-    }
-    .conn-tag.alone      { color:var(--text-dim);  border-color:var(--border);     background:transparent; }
-    .conn-tag.connecting { color:#f59e0b;           border-color:#78350f;           background:#1c1000; }
-    .conn-tag.connected  { color:var(--accent);     border-color:var(--accent-dim); background:var(--self-bg); }
-
-    /* ════════════════════════════════════
-       LIGHTBOX
-    ════════════════════════════════════ */
-    #lightbox {
-      display:none; position:fixed; inset:0; z-index:9999;
-      background:rgba(0,0,0,0.93); align-items:center; justify-content:center;
-      cursor:zoom-out; -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);
-    }
-    #lightbox.open { display:flex; }
-    #lightbox img {
-      max-width:95vw; max-height:92dvh; object-fit:contain;
-      border-radius:8px; border:1px solid var(--border); pointer-events:none;
-      animation:slide-in 0.15s ease forwards;
-    }
-    #lightbox-close {
-      position:absolute; top:16px; right:16px;
-      background:var(--bg-raised); border:1px solid var(--border);
-      border-radius:8px; color:var(--text-muted);
-      width:40px; height:40px; display:flex; align-items:center; justify-content:center;
-      cursor:pointer; transition:background 0.12s;
-      -webkit-tap-highlight-color:transparent;
-    }
-    #lightbox-close:hover { background:var(--bg-hover); color:var(--text); }
-
-    /* ════════════════════════════════════
-       DRAG OVERLAY
-    ════════════════════════════════════ */
-    #drag-overlay {
-      display:none; position:fixed; inset:0; z-index:8888;
-      background:rgba(34,197,94,0.07); border:2px dashed var(--accent);
-      align-items:center; justify-content:center; gap:10px;
-      font-size:1rem; color:var(--accent); letter-spacing:0.08em;
-      font-family:ui-monospace,monospace; pointer-events:none;
-    }
-    #drag-overlay.show { display:flex; }
-
-    /* ════════════════════════════════════
-       TOASTS
-    ════════════════════════════════════ */
-    #toast-container {
-      position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
-      left:50%; transform:translateX(-50%); z-index:7777;
-      display:flex; flex-direction:column-reverse; gap:6px; pointer-events:none;
-    }
-    .toast {
-      background:var(--bg-raised); border:1px solid var(--border);
-      color:var(--text); font-size:0.78rem; padding:8px 16px;
-      border-radius:8px; animation:fade-up 0.18s ease forwards;
-      white-space:nowrap; font-family:ui-monospace,monospace; letter-spacing:0.03em;
-    }
-
-    /* ════════════════════════════════════
-       IMAGE SEND PROGRESS
-    ════════════════════════════════════ */
-    #img-progress {
-      position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
-      right:16px; background:var(--bg-raised); border:1px solid var(--border);
-      border-radius:8px; padding:8px 14px; font-size:0.74rem;
-      font-family:ui-monospace,monospace; color:var(--text-muted);
-      z-index:6666; display:none; animation:fade-up 0.18s ease;
-    }
-
-    /* ════════════════════════════════════
-       FOCUS RINGS (ACCESSIBILITY)
-    ════════════════════════════════════ */
-    :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-
-    /* ════════════════════════════════════
-       MOBILE COMPACT
-    ════════════════════════════════════ */
-    @media (max-height:520px) {
-      .lobby-card { padding:18px; }
-      #lobby-hero  { display:none; }
-    }
+    @media(max-height:520px){.lobby-card{padding:18px}#lobby-hero{display:none}}
   </style>
 </head>
 <body>
 <div id="app">
 
-  <!-- ══════════════════════════════════════
-       LOBBY SCREEN
-  ══════════════════════════════════════ -->
+  <!-- ══════════ LOBBY ══════════ -->
   <div id="lobby" class="screen active">
-
     <!-- Top bar -->
-    <div class="safe-top" style="position:absolute;top:0;left:0;right:0;
-         display:flex;align-items:center;justify-content:space-between;padding:14px 16px;z-index:10;">
-      <div class="branding">
-        <span class="pulse-dot"></span>
-        <b>NULLVOID</b>
-        <span style="color:var(--text-dim)">//</span>
-        <b>EPHEMERAL MESH</b>
-      </div>
-      <div class="palette-wrap">
-        <button id="lb-palette-btn" class="btn" style="min-width:40px;min-height:40px;width:40px;height:40px;padding:0;" aria-label="Switch palette">
+    <div class="safe-top" style="position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;z-index:10">
+      <div class="branding"><span class="pulse-dot"></span><b>NULLVOID</b><span style="color:var(--text-dim)">//</span><b>EPHEMERAL MESH</b></div>
+      <div class="pal-wrap">
+        <button id="lb-pal-btn" class="btn" style="min-width:40px;min-height:40px;width:40px;height:40px;padding:0" aria-label="Switch palette">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
         </button>
-        <div id="lb-palette-panel" class="palette-panel"></div>
+        <div id="lb-pal-panel" class="pal-panel"></div>
       </div>
     </div>
-
     <!-- Content -->
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
-         flex:1;padding:80px 20px 60px;width:100%;max-width:440px;margin:0 auto;gap:28px;">
-
-      <div id="lobby-hero" style="text-align:center;">
-        <h1 style="font-size:2.1rem;font-weight:800;letter-spacing:-0.03em;
-             color:var(--text);line-height:1.1;font-family:ui-monospace,monospace;">
-          NULL<span style="color:var(--accent)">VOID</span>
-        </h1>
-        <p style="margin-top:8px;font-size:0.78rem;color:var(--text-dim);
-             letter-spacing:0.07em;font-family:ui-monospace,monospace;text-transform:uppercase;">
-          No logs. No trace. Pure mesh.
-        </p>
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:80px 20px 60px;width:100%;max-width:440px;margin:0 auto;gap:28px">
+      <div id="lobby-hero" style="text-align:center">
+        <h1 style="font-size:2.1rem;font-weight:800;letter-spacing:-.03em;color:var(--text);line-height:1.1;font-family:ui-monospace,monospace">NULL<span style="color:var(--accent)">VOID</span></h1>
+        <p style="margin-top:8px;font-size:.78rem;color:var(--text-dim);letter-spacing:.07em;font-family:ui-monospace,monospace;text-transform:uppercase">No logs. No trace. Pure mesh.</p>
       </div>
-
       <div class="lobby-card">
-        <!-- Alias -->
-        <div style="margin-bottom:18px;">
-          <label style="display:block;font-size:0.7rem;font-family:ui-monospace,monospace;
-                 letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;">
-            Your Alias
-          </label>
-          <input id="handle-input" class="field" type="text"
-            placeholder="Leave blank for random alias"
-            autocomplete="off" spellcheck="false" maxlength="24" />
+        <div style="margin-bottom:18px">
+          <label style="display:block;font-size:.7rem;font-family:ui-monospace,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px">Your Alias</label>
+          <input id="handle-input" class="field" type="text" placeholder="Leave blank for random alias" autocomplete="off" spellcheck="false" maxlength="24" />
         </div>
-
-        <!-- Create -->
-        <button id="create-btn" style="width:100%;padding:12px;border-radius:8px;
-               background:var(--accent-dim);border:1px solid var(--accent-dim);
-               color:var(--accent);font-weight:600;font-size:0.9rem;cursor:pointer;
-               letter-spacing:0.02em;transition:background 0.15s,border-color 0.15s;
-               display:flex;align-items:center;justify-content:center;gap:8px;
-               min-height:44px;font-family:inherit;">
+        <button id="create-btn" style="width:100%;padding:12px;border-radius:8px;background:var(--accent-dim);border:1px solid var(--accent-dim);color:var(--accent);font-weight:600;font-size:.9rem;cursor:pointer;letter-spacing:.02em;transition:background .15s,border-color .15s;display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;font-family:inherit">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           Create Room
         </button>
-
-        <div class="divider" style="margin:16px 0;">or join existing</div>
-
-        <!-- Join -->
-        <div style="display:flex;gap:8px;">
-          <input id="join-input" class="field" type="text" placeholder="ROOM CODE" maxlength="6"
-            autocomplete="off" spellcheck="false"
-            style="text-transform:uppercase;letter-spacing:0.2em;font-family:ui-monospace,monospace;font-size:1rem;flex:1;" />
+        <div class="divider" style="margin:16px 0">or join existing</div>
+        <div style="display:flex;gap:8px">
+          <input id="join-input" class="field" type="text" placeholder="ROOM CODE" maxlength="6" autocomplete="off" spellcheck="false" style="text-transform:uppercase;letter-spacing:.2em;font-family:ui-monospace,monospace;font-size:1rem;flex:1" />
           <button id="join-btn" class="btn btn-primary" aria-label="Join room">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
           </button>
         </div>
-        <p id="join-error" style="display:none;margin-top:8px;font-size:0.76rem;
-             font-family:ui-monospace,monospace;color:#f87171;letter-spacing:0.04em;"></p>
+        <p id="join-error" style="display:none;margin-top:8px;font-size:.76rem;font-family:ui-monospace,monospace;color:#f87171;letter-spacing:.04em"></p>
       </div>
     </div>
-
-    <!-- Footer -->
-    <div class="safe-bottom" style="position:absolute;bottom:0;left:0;right:0;padding:10px;">
-      <p class="attribution">Developed by Rajendra Singh Bisht</p>
-    </div>
+    <div class="safe-bottom" style="position:absolute;bottom:0;left:0;right:0;padding:10px"><p class="attribution">Developed by Rajendra Singh Bisht</p></div>
   </div>
 
-  <!-- ══════════════════════════════════════
-       CHAT SCREEN
-  ══════════════════════════════════════ -->
+  <!-- ══════════ CHAT ══════════ -->
   <div id="chat" class="screen">
-
     <!-- Header -->
     <div id="chat-header" class="safe-top">
-      <div style="display:flex;flex-direction:column;gap:4px;min-width:0;overflow:hidden;">
-        <div class="branding">
-          <span class="pulse-dot" id="mesh-dot"></span>
-          <b>NULLVOID</b>
-          <span style="color:var(--text-dim)">//</span>
-          <b>EPHEMERAL MESH</b>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span style="font-size:0.68rem;font-family:ui-monospace,monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;">Room</span>
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:0;overflow:hidden">
+        <div class="branding"><span class="pulse-dot" id="mesh-dot"></span><b>NULLVOID</b><span style="color:var(--text-dim)">//</span><b>EPHEMERAL MESH</b></div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:.68rem;font-family:ui-monospace,monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em">Room</span>
           <span id="room-code-disp" class="room-code"></span>
-          <button id="copy-btn" class="btn" style="min-width:28px;min-height:28px;width:28px;height:28px;padding:0;border-radius:5px;" aria-label="Copy room code">
+          <button id="copy-btn" class="btn" style="min-width:28px;min-height:28px;width:28px;height:28px;padding:0;border-radius:5px" aria-label="Copy room code">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
         </div>
       </div>
-
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-        <div class="peer-badge">
-          <span style="color:var(--accent);">●</span>
-          <span id="peer-count">1</span>
-          <span>connected</span>
-        </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+        <div class="peer-badge"><span style="color:var(--accent)">●</span><span id="peer-count">1</span><span>connected</span></div>
         <span id="conn-tag" class="conn-tag alone">alone</span>
-        <div class="palette-wrap">
-          <button id="ch-palette-btn" class="btn" style="min-width:36px;min-height:36px;width:36px;height:36px;padding:0;" aria-label="Switch palette">
+        <div class="pal-wrap">
+          <button id="ch-pal-btn" class="btn" style="min-width:36px;min-height:36px;width:36px;height:36px;padding:0" aria-label="Switch palette">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
           </button>
-          <div id="ch-palette-panel" class="palette-panel"></div>
+          <div id="ch-pal-panel" class="pal-panel"></div>
         </div>
-        <button id="leave-btn" class="btn btn-danger" style="min-width:36px;min-height:36px;width:36px;height:36px;padding:0;" aria-label="Leave room" title="Leave room">
+        <button id="leave-btn" class="btn btn-danger" style="min-width:36px;min-height:36px;width:36px;height:36px;padding:0" aria-label="Leave room" title="Leave room">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         </button>
       </div>
@@ -552,70 +300,54 @@
     <!-- Messages -->
     <div id="messages"></div>
 
-    <!-- Typing bar -->
+    <!-- Typing -->
     <div id="typing-bar">
       <span id="typing-inner">
-        <span id="typing-who" style="color:var(--text-muted);"></span>
-        <span style="color:var(--text-dim);font-size:0.68rem;">is typing</span>
-        <span style="display:inline-flex;gap:3px;align-items:center;margin-left:1px;">
-          <span class="typing-dot"></span>
-          <span class="typing-dot"></span>
-          <span class="typing-dot"></span>
+        <span id="typing-who" style="color:var(--text-muted)"></span>
+        <span style="color:var(--text-dim);font-size:.68rem">is typing</span>
+        <span style="display:inline-flex;gap:3px;align-items:center;margin-left:1px">
+          <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
         </span>
       </span>
     </div>
 
-    <!-- Input area -->
+    <!-- Input -->
     <div id="input-area" class="safe-bottom">
       <div id="input-row">
-
-        <!-- Upload button + popup menu -->
-        <div style="position:relative;">
+        <div style="position:relative">
           <button id="upload-btn" class="btn" aria-label="Share photo" title="Share photo">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </button>
-
-          <!-- Picker popup (camera OR gallery) -->
           <div id="upload-menu">
-            <button class="upload-option" id="opt-gallery">
+            <button class="upload-opt" id="opt-gallery">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
               Photo Library
             </button>
-            <button class="upload-option" id="opt-camera">
+            <button class="upload-opt" id="opt-camera">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
               Take Photo
             </button>
           </div>
-
-          <!-- Hidden file inputs (split: gallery vs camera) -->
-          <input id="file-gallery" type="file" accept="image/*" style="display:none;" />
-          <input id="file-camera"  type="file" accept="image/*" capture="environment" style="display:none;" />
+          <!-- TWO separate inputs — no capture on gallery, capture on camera -->
+          <input id="file-gallery" type="file" accept="image/*" style="display:none" />
+          <input id="file-camera"  type="file" accept="image/*" capture="environment" style="display:none" />
         </div>
-
         <textarea id="msg-input" rows="1" placeholder="Message… (Shift+Enter for new line)" aria-label="Message input"></textarea>
-
         <button id="send-btn" class="btn btn-primary" aria-label="Send message">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
       </div>
-      <div style="padding:2px 12px 6px;text-align:center;">
-        <p class="attribution">Developed by Rajendra Singh Bisht</p>
-      </div>
+      <div style="padding:2px 12px 6px;text-align:center"><p class="attribution">Developed by Rajendra Singh Bisht</p></div>
     </div>
   </div>
-
-</div><!-- #app -->
+</div>
 
 <!-- Lightbox -->
 <div id="lightbox" role="dialog" aria-modal="true" aria-label="Image viewer">
-  <div id="lightbox-close" aria-label="Close image viewer">
+  <div id="lb-close" aria-label="Close">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </div>
-  <img id="lightbox-img" src="" alt="Shared image" />
+  <img id="lb-img" src="" alt="Shared image" />
 </div>
 
 <!-- Drag overlay -->
@@ -624,434 +356,295 @@
   Drop image to share
 </div>
 
-<!-- Toast -->
-<div id="toast-container" aria-live="polite"></div>
+<!-- Toasts -->
+<div id="toast-cont" aria-live="polite"></div>
 
-<!-- Image send progress -->
-<div id="img-progress">Sending image…</div>
+<!-- Image progress -->
+<div id="img-prog"></div>
 
-<!-- ══════════════════════════════════════
-     APPLICATION LOGIC
-══════════════════════════════════════ -->
 <script>
 'use strict';
+/* ════════════════════════════════════════════════════════════
+   NULLVOID — Core Application
+   Image fix: Canvas → dataURL → base64 string chunks (JSON-safe)
+   No Uint8Array over JSON channel (crashes PeerJS data channel)
+════════════════════════════════════════════════════════════ */
 
-/* ── Constants ──────────────────────────────────────────── */
-const ROOM_CHARS        = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const ALIAS_WORDS       = ['null','void','ghost','flux','node','mesh','dark','edge','byte','zero','echo','rift'];
-const PALETTES          = [
+/* ── Constants ── */
+const ROOM_CHARS  = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const ALIAS_WORDS = ['null','void','ghost','flux','node','mesh','dark','edge','byte','zero','echo','rift'];
+const PALETTES    = [
   { id:'zinc',   label:'Zinc / Slate',   color:'#09090b' },
   { id:'abyss',  label:'Midnight Abyss', color:'#050814' },
   { id:'forest', label:'Deep Forest',    color:'#07130e' },
   { id:'violet', label:'Deep Violet',    color:'#0d0b18' },
   { id:'oled',   label:'Pure OLED',      color:'#000000' },
 ];
-const PEERJS_CFG = { host:'0.peerjs.com', port:443, path:'/', secure:true, debug:0 };
-const ICE_CFG    = { iceServers:[
+const PEER_CFG = { host:'0.peerjs.com', port:443, path:'/', secure:true, debug:0 };
+const ICE_CFG  = { iceServers:[
   { urls:'stun:stun.l.google.com:19302' },
   { urls:'stun:stun1.l.google.com:19302' },
   { urls:'stun:stun.stunprotocol.org:3478' },
 ]};
-const CHUNK_SIZE       = 16384;  // 16 KB per data-channel chunk
-const MAX_IMG_DIM      = 1600;
-const IMG_QUALITY      = 0.80;
-const TYPING_THROTTLE  = 2000;
-const TYPING_TIMEOUT   = 2500;
+const MAX_DIM       = 800;    // px — aggressive downscale keeps payload tiny
+const IMG_QUALITY   = 0.72;   // JPEG quality
+const B64_CHUNK     = 6000;   // chars per chunk (~4.5KB)
+const TYPING_THR    = 2000;
+const TYPING_TOUT   = 2500;
 
-/* ── State ─────────────────────────────────────────────── */
-let myPeer      = null;
-let myPeerId    = null;
-let myHandle    = '';
-let roomCode    = '';
-let conns       = new Map();   // peerId → DataConnection
-let imageUrls   = new Set();   // object URLs
-let imgBufs     = {};          // partial image chunk reassembly
-let activePal   = 'zinc';
-let typingTimer = null;
-let typingClear = null;
-let iAmTyping   = false;
-let lastTypeSent= 0;
-let dragCount   = 0;
-let curScreen   = 'lobby';
-let uploadOpen  = false;
+/* ── State ── */
+let myPeer = null, myPeerId = null, myHandle = '', roomCode = '';
+let conns = new Map();       // peerId → DataConnection
+let imgBufs = {};            // chunk reassembly: msgId → {chunks[], received, total, ...}
+let activePal = 'zinc';
+let typingTimer = null, typingClear = null;
+let iAmTyping = false, lastTypeSent = 0;
+let dragCount = 0, curScreen = 'lobby';
 
-/* ── DOM Shortcuts ─────────────────────────────────────── */
-const $  = id => document.getElementById(id);
-const qs = sel => document.querySelector(sel);
+/* ── DOM ── */
+const G = id => document.getElementById(id);
+const lobbyEl      = G('lobby'),       chatEl       = G('chat');
+const handleInput  = G('handle-input'),createBtn    = G('create-btn');
+const joinInput    = G('join-input'),  joinBtn      = G('join-btn'),  joinError = G('join-error');
+const messagesEl   = G('messages'),    msgInput     = G('msg-input'), sendBtn   = G('send-btn');
+const uploadBtn    = G('upload-btn'),  uploadMenu   = G('upload-menu');
+const fileGallery  = G('file-gallery'),fileCamera   = G('file-camera');
+const optGallery   = G('opt-gallery'), optCamera    = G('opt-camera');
+const roomCodeDisp = G('room-code-disp'), copyBtn   = G('copy-btn');
+const peerCountEl  = G('peer-count'), connTag       = G('conn-tag'), meshDot   = G('mesh-dot');
+const typingInner  = G('typing-inner'),typingWho    = G('typing-who');
+const lightbox     = G('lightbox'),   lbImg         = G('lb-img'),   lbClose   = G('lb-close');
+const dragOverlay  = G('drag-overlay'),toastCont    = G('toast-cont'), imgProg  = G('img-prog');
+const lbPalBtn     = G('lb-pal-btn'), lbPalPanel    = G('lb-pal-panel');
+const chPalBtn     = G('ch-pal-btn'), chPalPanel    = G('ch-pal-panel');
+const leaveBtn     = G('leave-btn');
 
-const lobbyEl        = $('lobby');
-const chatEl         = $('chat');
-const handleInput    = $('handle-input');
-const createBtn      = $('create-btn');
-const joinInput      = $('join-input');
-const joinBtn        = $('join-btn');
-const joinError      = $('join-error');
-const messagesEl     = $('messages');
-const msgInput       = $('msg-input');
-const sendBtn        = $('send-btn');
-const uploadBtn      = $('upload-btn');
-const uploadMenu     = $('upload-menu');
-const fileGallery    = $('file-gallery');
-const fileCamera     = $('file-camera');
-const optGallery     = $('opt-gallery');
-const optCamera      = $('opt-camera');
-const roomCodeDisp   = $('room-code-disp');
-const copyBtn        = $('copy-btn');
-const peerCountEl    = $('peer-count');
-const connTag        = $('conn-tag');
-const meshDot        = $('mesh-dot');
-const typingInner    = $('typing-inner');
-const typingWho      = $('typing-who');
-const lightbox       = $('lightbox');
-const lightboxImg    = $('lightbox-img');
-const lightboxClose  = $('lightbox-close');
-const dragOverlay    = $('drag-overlay');
-const toastCont      = $('toast-container');
-const imgProgress    = $('img-progress');
-const lbPaletteBtn   = $('lb-palette-btn');
-const lbPalettePanel = $('lb-palette-panel');
-const chPaletteBtn   = $('ch-palette-btn');
-const chPalettePanel = $('ch-palette-panel');
-const leaveBtn       = $('leave-btn');
-
-/* ══════════════════════════════════════════════════════════
+/* ════════════════════════
    PALETTE SYSTEM
-══════════════════════════════════════════════════════════ */
-function buildPalette(panelEl) {
-  panelEl.innerHTML = '';
+════════════════════════ */
+function buildPalette(panel) {
+  panel.innerHTML = '';
   PALETTES.forEach(p => {
-    const btn = document.createElement('button');
-    btn.className = 'palette-swatch' + (p.id === activePal ? ' active' : '');
-    btn.setAttribute('role', 'menuitem');
-
-    const dot = document.createElement('span');
-    dot.className = 'swatch-dot';
-    dot.style.background = p.color;
-
-    const lbl = document.createElement('span');
-    lbl.textContent = p.label;
-
-    btn.appendChild(dot);
-    btn.appendChild(lbl);
-    btn.addEventListener('click', () => setPalette(p.id));
-    panelEl.appendChild(btn);
+    const b = document.createElement('button');
+    b.className = 'pal-swatch' + (p.id === activePal ? ' active' : '');
+    const d = document.createElement('span'); d.className = 'swatch-dot'; d.style.background = p.color;
+    const l = document.createElement('span'); l.textContent = p.label;
+    b.append(d, l);
+    b.onclick = () => setPalette(p.id);
+    panel.appendChild(b);
   });
 }
-
 function setPalette(id) {
   activePal = id;
   document.documentElement.dataset.theme = id;
-  closeAllPanels();
-  buildPalette(lbPalettePanel);
-  buildPalette(chPalettePanel);
+  closePopups();
+  buildPalette(lbPalPanel);
+  buildPalette(chPalPanel);
 }
-
-function togglePalette(panelEl) {
-  const opening = !panelEl.classList.contains('open');
-  closeAllPanels();
-  if (opening) {
-    buildPalette(panelEl);
-    panelEl.classList.add('open');
-  }
+function togglePal(panel) {
+  const open = !panel.classList.contains('open');
+  closePopups();
+  if (open) { buildPalette(panel); panel.classList.add('open'); }
 }
-
-function closeAllPanels() {
-  lbPalettePanel.classList.remove('open');
-  chPalettePanel.classList.remove('open');
+function closePopups() {
+  lbPalPanel.classList.remove('open');
+  chPalPanel.classList.remove('open');
   uploadMenu.classList.remove('open');
-  uploadOpen = false;
 }
+lbPalBtn.onclick = e => { e.stopPropagation(); togglePal(lbPalPanel); };
+chPalBtn.onclick = e => { e.stopPropagation(); togglePal(chPalPanel); };
+document.addEventListener('click', closePopups);
 
-lbPaletteBtn.addEventListener('click', e => { e.stopPropagation(); togglePalette(lbPalettePanel); });
-chPaletteBtn.addEventListener('click', e => { e.stopPropagation(); togglePalette(chPalettePanel); });
-document.addEventListener('click', closeAllPanels);
-
-/* ══════════════════════════════════════════════════════════
-   UPLOAD MENU (Camera / Gallery)
-══════════════════════════════════════════════════════════ */
-uploadBtn.addEventListener('click', e => {
+/* ════════════════════════
+   UPLOAD MENU
+════════════════════════ */
+uploadBtn.onclick = e => {
   e.stopPropagation();
-  const opening = !uploadMenu.classList.contains('open');
-  closeAllPanels();
-  if (opening) {
-    uploadMenu.classList.add('open');
-    uploadOpen = true;
-  }
-});
+  const open = !uploadMenu.classList.contains('open');
+  closePopups();
+  if (open) uploadMenu.classList.add('open');
+};
+optGallery.onclick = e => { e.stopPropagation(); closePopups(); fileGallery.click(); };
+optCamera.onclick  = e => { e.stopPropagation(); closePopups(); fileCamera.click();  };
+fileGallery.onchange = e => { const f = e.target.files[0]; if (f) processImage(f); fileGallery.value = ''; };
+fileCamera.onchange  = e => { const f = e.target.files[0]; if (f) processImage(f); fileCamera.value  = ''; };
 
-// Gallery option — opens photo library (no capture attribute)
-optGallery.addEventListener('click', e => {
-  e.stopPropagation();
-  closeAllPanels();
-  fileGallery.click();
-});
-
-// Camera option — opens live camera
-optCamera.addEventListener('click', e => {
-  e.stopPropagation();
-  closeAllPanels();
-  fileCamera.click();
-});
-
-fileGallery.addEventListener('change', e => {
-  const f = e.target.files[0];
-  if (f) handleImageFile(f);
-  fileGallery.value = '';
-});
-
-fileCamera.addEventListener('change', e => {
-  const f = e.target.files[0];
-  if (f) handleImageFile(f);
-  fileCamera.value = '';
-});
-
-/* ══════════════════════════════════════════════════════════
+/* ════════════════════════
    UTILITIES
-══════════════════════════════════════════════════════════ */
-function genRoomCode() {
+════════════════════════ */
+function genCode() {
   const a = new Uint8Array(6);
   crypto.getRandomValues(a);
   return Array.from(a).map(b => ROOM_CHARS[b % ROOM_CHARS.length]).join('');
 }
-
 function genAlias() {
-  const w = ALIAS_WORDS[Math.floor(Math.random() * ALIAS_WORDS.length)];
-  const n = Math.floor(Math.random() * 900) + 100;
-  return `${w}-${n}`;
+  return ALIAS_WORDS[Math.floor(Math.random() * ALIAS_WORDS.length)] + '-' + (Math.floor(Math.random() * 900) + 100);
 }
-
-function safe(str) { return String(str).slice(0, 4000); }
-
-function ts() {
-  return new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:false });
-}
-
-function showToast(msg) {
+function safe(s) { return String(s || '').slice(0, 4000); }
+function nowTs()  { return new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', hour12:false }); }
+function toast(msg) {
   const el = document.createElement('div');
-  el.className = 'toast';
-  el.textContent = msg;
+  el.className = 'toast'; el.textContent = msg;
   toastCont.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
+  setTimeout(() => el.remove(), 3200);
 }
-
-function setJoinError(msg) {
-  joinError.textContent = msg;
-  joinError.style.display = 'block';
+function showJoinErr(msg) {
+  joinError.textContent = msg; joinError.style.display = 'block';
   setTimeout(() => { joinError.style.display = 'none'; }, 3000);
 }
-
 function showScreen(name) {
   curScreen = name;
   lobbyEl.classList.toggle('active', name === 'lobby');
-  chatEl.classList.toggle('active', name === 'chat');
+  chatEl.classList.toggle('active',  name === 'chat');
 }
-
-function setConnStatus(state) {
-  connTag.className = 'conn-tag ' + state;
-  connTag.textContent = state;
-  meshDot.style.background = state === 'connected' ? 'var(--accent)' : state === 'connecting' ? '#f59e0b' : 'var(--text-dim)';
+function setConnStatus(s) {
+  connTag.className = 'conn-tag ' + s; connTag.textContent = s;
+  meshDot.style.background = s === 'connected' ? 'var(--accent)' : s === 'connecting' ? '#f59e0b' : 'var(--text-dim)';
 }
+function updateCount() { peerCountEl.textContent = conns.size + 1; }
 
-function updatePeerCount() {
-  peerCountEl.textContent = conns.size + 1;
-}
-
-/* ══════════════════════════════════════════════════════════
-   MESSAGE RENDERING
-══════════════════════════════════════════════════════════ */
-function addMessage({ handle, text, time, isSelf, isSystem, imageUrl }) {
+/* ════════════════════════
+   MESSAGES
+════════════════════════ */
+function addMsg({ handle, text, time, isSelf, isSystem, imgUrl }) {
   const wrap = document.createElement('div');
   wrap.className = 'msg-wrap ' + (isSystem ? 'system' : isSelf ? 'self' : 'peer');
-
   if (isSystem) {
-    const b = document.createElement('div');
-    b.className = 'bubble-system';
-    b.textContent = safe(text);
+    const b = document.createElement('div'); b.className = 'bubble-system'; b.textContent = safe(text);
     wrap.appendChild(b);
-
-  } else if (imageUrl) {
-    const meta = makeMeta(handle, time);
-    const imgWrap = document.createElement('div');
-    imgWrap.className = 'img-bubble';
-    const img = document.createElement('img');
-    img.src = imageUrl;
-    img.alt = 'Shared image';
-    img.loading = 'lazy';
-    img.addEventListener('click', () => openLightbox(imageUrl));
-    imgWrap.appendChild(img);
-    wrap.appendChild(meta);
-    wrap.appendChild(imgWrap);
-
+  } else if (imgUrl) {
+    wrap.appendChild(makeMeta(handle, time));
+    const iw = document.createElement('div'); iw.className = 'img-bubble';
+    const im = document.createElement('img'); im.src = imgUrl; im.alt = 'Shared image'; im.decoding = 'async';
+    im.onclick = () => openLB(imgUrl);
+    iw.appendChild(im); wrap.appendChild(iw);
   } else {
-    const meta = makeMeta(handle, time);
+    wrap.appendChild(makeMeta(handle, time));
     const b = document.createElement('div');
     b.className = 'bubble ' + (isSelf ? 'bubble-self' : 'bubble-peer');
-    b.textContent = safe(text);
-    wrap.appendChild(meta);
-    wrap.appendChild(b);
+    b.textContent = safe(text); wrap.appendChild(b);
   }
-
   messagesEl.appendChild(wrap);
-  scrollBottom();
-}
-
-function makeMeta(handle, time) {
-  const meta = document.createElement('div');
-  meta.className = 'msg-meta';
-  const n = document.createElement('span');
-  n.textContent = safe(handle);
-  const t = document.createElement('span');
-  t.textContent = time;
-  meta.appendChild(n);
-  meta.appendChild(t);
-  return meta;
-}
-
-function scrollBottom() {
   requestAnimationFrame(() => { messagesEl.scrollTop = messagesEl.scrollHeight; });
 }
+function makeMeta(handle, time) {
+  const m = document.createElement('div'); m.className = 'msg-meta';
+  const n = document.createElement('span'); n.textContent = safe(handle);
+  const t = document.createElement('span'); t.textContent = time || '';
+  m.append(n, t); return m;
+}
 
-/* ══════════════════════════════════════════════════════════
-   TYPING INDICATORS
-══════════════════════════════════════════════════════════ */
-function showTyping(handle) {
-  typingWho.textContent = safe(handle);
+/* ════════════════════════
+   TYPING
+════════════════════════ */
+function showTyping(h) {
+  typingWho.textContent = safe(h);
   typingInner.classList.add('show');
   clearTimeout(typingClear);
-  typingClear = setTimeout(hideTyping, 3500);
+  typingClear = setTimeout(() => typingInner.classList.remove('show'), 3500);
 }
-
-function hideTyping() {
-  typingInner.classList.remove('show');
-}
-
-function broadcastTyping(type) {
-  broadcast({ type, handle: myHandle });
-}
+function bcastTyping(type) { broadcast({ type, handle: myHandle }); }
 
 msgInput.addEventListener('input', () => {
   autoResize();
   if (curScreen !== 'chat' || conns.size === 0) return;
   const now = Date.now();
-  if (now - lastTypeSent > TYPING_THROTTLE) {
-    broadcastTyping('typing');
-    lastTypeSent = now;
-    iAmTyping = true;
-  }
+  if (now - lastTypeSent > TYPING_THR) { bcastTyping('typing'); lastTypeSent = now; iAmTyping = true; }
   clearTimeout(typingTimer);
-  typingTimer = setTimeout(() => {
-    if (iAmTyping) { broadcastTyping('stop_typing'); iAmTyping = false; }
-  }, TYPING_TIMEOUT);
+  typingTimer = setTimeout(() => { if (iAmTyping) { bcastTyping('stop_typing'); iAmTyping = false; } }, TYPING_TOUT);
 });
 
-/* ══════════════════════════════════════════════════════════
-   IMAGE PROCESSING — Canvas downscale + chunked transfer
-══════════════════════════════════════════════════════════ */
-function handleImageFile(file) {
-  if (!file || !file.type.startsWith('image/')) {
-    showToast('Only image files are supported.');
-    return;
-  }
-  // Show progress
-  imgProgress.style.display = 'block';
-  imgProgress.textContent = 'Processing image…';
+/* ════════════════════════
+   IMAGE PROCESSING
+   KEY FIX: convert to base64 string chunks — safe for JSON data channel
+   Never send raw Uint8Array over PeerJS JSON serialization (crashes channel)
+════════════════════════ */
+function processImage(file) {
+  if (!file || !file.type.startsWith('image/')) { toast('Only images are supported.'); return; }
 
-  const reader = new FileReader();
-  reader.onerror = () => { imgProgress.style.display = 'none'; showToast('Could not read image.'); };
-  reader.onload = evt => {
-    const image = new Image();
-    image.onerror = () => { imgProgress.style.display = 'none'; showToast('Invalid image.'); };
-    image.onload = () => {
-      // Downscale via canvas
-      let { width, height } = image;
-      if (width > MAX_IMG_DIM || height > MAX_IMG_DIM) {
-        if (width >= height) { height = Math.round(height * MAX_IMG_DIM / width); width = MAX_IMG_DIM; }
-        else                 { width = Math.round(width * MAX_IMG_DIM / height); height = MAX_IMG_DIM; }
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(image, 0, 0, width, height);
+  imgProg.textContent = 'Processing…';
+  imgProg.style.display = 'block';
 
-      // Get as JPEG blob
-      canvas.toBlob(blob => {
-        if (!blob) { imgProgress.style.display = 'none'; showToast('Failed to process image.'); return; }
+  // Use object URL to load into <img> without holding full DataURL in RAM
+  const objectUrl = URL.createObjectURL(file);
+  const img = new Image();
 
-        // Preview locally instantly
-        const localUrl = URL.createObjectURL(blob);
-        imageUrls.add(localUrl);
-        addMessage({ handle: myHandle, time: ts(), isSelf: true, imageUrl: localUrl });
-        imgProgress.style.display = 'none';
-
-        // Transmit via data channel in chunks
-        if (conns.size === 0) {
-          showToast('No peers connected — image shown locally only.');
-          return;
-        }
-        sendImageBlob(blob);
-      }, 'image/jpeg', IMG_QUALITY);
-    };
-    image.src = evt.target.result;
+  img.onerror = () => {
+    URL.revokeObjectURL(objectUrl);
+    imgProg.style.display = 'none';
+    toast('Could not load image.');
   };
-  reader.readAsDataURL(file);
-}
 
-function sendImageBlob(blob) {
-  const msgId = crypto.randomUUID();
-  const mimeType = blob.type || 'image/jpeg';
+  img.onload = () => {
+    URL.revokeObjectURL(objectUrl); // free immediately after decode
 
-  blob.arrayBuffer().then(ab => {
-    const bytes = new Uint8Array(ab);
-    const total = Math.ceil(bytes.length / CHUNK_SIZE);
-
-    // Send metadata first
-    broadcast({ type:'img_meta', msgId, total, mimeType, handle: myHandle, time: ts() });
-
-    // Send chunks with small delay to avoid congestion
-    let i = 0;
-    function sendNext() {
-      if (i >= total) return;
-      const chunk = bytes.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-      broadcast({ type:'img_chunk', msgId, index: i, data: Array.from(chunk) });
-      i++;
-      // Small yield to keep data channel breathing
-      if (i < total) setTimeout(sendNext, 4);
+    // Downscale on canvas
+    let w = img.naturalWidth, h = img.naturalHeight;
+    if (w > MAX_DIM || h > MAX_DIM) {
+      if (w >= h) { h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
+      else        { w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
     }
-    sendNext();
-  }).catch(() => showToast('Image transfer failed.'));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+    // Get base64-encoded JPEG string
+    const dataUrl = canvas.toDataURL('image/jpeg', IMG_QUALITY);
+
+    // Show sender's own preview immediately
+    addMsg({ handle: myHandle, time: nowTs(), isSelf: true, imgUrl: dataUrl });
+    imgProg.style.display = 'none';
+
+    if (conns.size === 0) {
+      toast('No peers connected — image shown locally only.');
+      return;
+    }
+
+    // Extract raw base64 (strip "data:image/jpeg;base64,")
+    const b64   = dataUrl.slice(dataUrl.indexOf(',') + 1);
+    const total = Math.ceil(b64.length / B64_CHUNK);
+    const msgId = crypto.randomUUID();
+    const time  = nowTs();
+
+    // 1. Announce metadata
+    broadcast({ type: 'img_meta', msgId, total, handle: myHandle, time });
+
+    // 2. Send chunks with 20ms spacing — prevents data channel buffer overflow
+    let i = 0;
+    function nextChunk() {
+      if (i >= total) return;
+      broadcast({ type: 'img_chunk', msgId, idx: i, data: b64.slice(i * B64_CHUNK, (i + 1) * B64_CHUNK) });
+      i++;
+      setTimeout(nextChunk, 20);
+    }
+    nextChunk();
+  };
+
+  img.src = objectUrl;
 }
 
-/* ══════════════════════════════════════════════════════════
-   WEBRTC / PEERJS
-══════════════════════════════════════════════════════════ */
+/* ════════════════════════
+   WEBRTC — PEERJS
+════════════════════════ */
 function initPeer(customId, onReady) {
   if (myPeer) { try { myPeer.destroy(); } catch(e){} }
   conns.clear();
-
-  const opts = { ...PEERJS_CFG, config: ICE_CFG };
+  const opts = { ...PEER_CFG, config: ICE_CFG };
   myPeer = customId ? new Peer(customId, opts) : new Peer(opts);
-
-  myPeer.on('open', id => {
-    myPeerId = id;
-    onReady(id);
-  });
-
+  myPeer.on('open', id => { myPeerId = id; onReady(id); });
   myPeer.on('connection', conn => wireConn(conn));
-
   myPeer.on('error', err => {
-    console.error('[NullVoid] peer error:', err.type);
+    console.error('[NullVoid] peer error:', err.type, err.message);
     if (err.type === 'unavailable-id') {
-      // Room ID taken — join as peer instead
-      showToast('Room active — joining as peer…');
+      // Room host slot taken — connect as normal peer instead
+      toast('Room active — connecting…');
       initPeer(null, () => connectTo('nv-' + roomCode));
     } else if (curScreen === 'lobby') {
-      setJoinError('Connection failed: ' + err.type);
+      showJoinErr('Connection failed: ' + err.type);
     } else {
-      showToast('⚡ ' + err.type);
+      toast('Network: ' + err.type);
     }
   });
-
   myPeer.on('disconnected', () => {
     if (curScreen === 'chat') setTimeout(() => { try { myPeer.reconnect(); } catch(e){} }, 2000);
   });
@@ -1060,92 +653,71 @@ function initPeer(customId, onReady) {
 function wireConn(conn) {
   conn.on('open', () => {
     conns.set(conn.peer, conn);
-    updatePeerCount();
-    setConnStatus('connected');
-    // Announce self
-    conn.send({ type:'hello', handle: myHandle });
+    updateCount(); setConnStatus('connected');
+    conn.send({ type: 'hello', handle: myHandle });
   });
-
-  conn.on('data', data => handleData(conn.peer, data));
-
+  conn.on('data', data => onData(conn.peer, data));
   conn.on('close', () => {
-    conns.delete(conn.peer);
-    updatePeerCount();
-    addMessage({ text:'A peer left the void.', isSystem:true });
+    conns.delete(conn.peer); updateCount();
+    addMsg({ text: 'A peer left the void.', isSystem: true });
     if (conns.size === 0) setConnStatus('alone');
   });
-
-  conn.on('error', err => {
-    console.error('[NullVoid] conn error:', err);
-    conns.delete(conn.peer);
-    updatePeerCount();
-  });
+  conn.on('error', err => { console.error('[NullVoid] conn err:', err); conns.delete(conn.peer); updateCount(); });
 }
 
 function connectTo(peerId) {
   if (conns.has(peerId)) return;
-  const conn = myPeer.connect(peerId, { reliable:true, serialization:'json' });
+  // NOTE: Do NOT pass serialization:'json' explicitly — use PeerJS default
+  // Passing serialization:'json' can conflict with how PeerJS handles the channel internally
+  const conn = myPeer.connect(peerId, { reliable: true });
   setConnStatus('connecting');
   wireConn(conn);
 }
 
 function broadcast(data) {
-  conns.forEach(conn => { try { conn.send(data); } catch(e){} });
+  conns.forEach(conn => { try { conn.send(data); } catch(e) { console.warn('[NV] send err', e); } });
 }
 
-/* ── Incoming protocol handler ─────────────────────────── */
-function handleData(fromId, data) {
-  if (!data?.type) return;
+/* ── Protocol handler ── */
+function onData(fromId, data) {
+  if (!data || !data.type) return;
   switch (data.type) {
-
-    case 'hello':
-      addMessage({ text: safe(data.handle) + ' entered the void.', isSystem:true });
+    case 'hello': {
+      addMsg({ text: safe(data.handle) + ' entered the void.', isSystem: true });
       const c = conns.get(fromId);
-      if (c) c.send({ type:'hello_ack', handle: myHandle });
+      if (c) c.send({ type: 'hello_ack', handle: myHandle });
       break;
-
+    }
     case 'hello_ack':
-      addMessage({ text: safe(data.handle) + ' is here.', isSystem:true });
+      addMsg({ text: safe(data.handle) + ' is here.', isSystem: true });
       break;
-
     case 'text':
-      addMessage({ handle: safe(data.handle), text: safe(data.text), time: safe(data.time), isSelf:false });
+      addMsg({ handle: safe(data.handle), text: safe(data.text), time: safe(data.time), isSelf: false });
       break;
-
     case 'typing':
       showTyping(data.handle);
       break;
-
     case 'stop_typing':
-      hideTyping();
+      typingInner.classList.remove('show');
       break;
-
     case 'img_meta':
+      // Initialize chunk buffer — array of null slots
       imgBufs[data.msgId] = {
-        chunks:   new Array(data.total),
-        received: 0,
-        total:    data.total,
-        mime:     data.mimeType,
-        handle:   data.handle,
-        time:     data.time,
+        chunks: new Array(data.total).fill(null),
+        received: 0, total: data.total,
+        handle: data.handle, time: data.time,
       };
       break;
-
     case 'img_chunk': {
       const buf = imgBufs[data.msgId];
       if (!buf) break;
-      buf.chunks[data.index] = new Uint8Array(data.data);
+      if (buf.chunks[data.idx] !== null) break; // dedupe
+      buf.chunks[data.idx] = data.data;          // string slice of base64
       buf.received++;
       if (buf.received === buf.total) {
-        // Reassemble
-        const len    = buf.chunks.reduce((s, c) => s + c.length, 0);
-        const merged = new Uint8Array(len);
-        let off = 0;
-        buf.chunks.forEach(c => { merged.set(c, off); off += c.length; });
-        const blob   = new Blob([merged], { type: buf.mime });
-        const url    = URL.createObjectURL(blob);
-        imageUrls.add(url);
-        addMessage({ handle: buf.handle, time: buf.time, isSelf:false, imageUrl: url });
+        // Reconstruct full data URL and render
+        const dataUrl = 'data:image/jpeg;base64,' + buf.chunks.join('');
+        addMsg({ handle: buf.handle, time: buf.time, isSelf: false, imgUrl: dataUrl });
         delete imgBufs[data.msgId];
       }
       break;
@@ -1153,32 +725,21 @@ function handleData(fromId, data) {
   }
 }
 
-/* ══════════════════════════════════════════════════════════
+/* ════════════════════════
    ROOM MANAGEMENT
-══════════════════════════════════════════════════════════ */
+════════════════════════ */
 function enterRoom(code, asCreator) {
-  roomCode  = code.toUpperCase();
-  myHandle  = handleInput.value.trim().slice(0,24) || genAlias();
-
+  roomCode = code.toUpperCase();
+  myHandle = handleInput.value.trim().slice(0, 24) || genAlias();
   roomCodeDisp.textContent = roomCode;
-  showScreen('chat');
-  setConnStatus('alone');
-  updatePeerCount();
-
-  addMessage({ text: 'You entered the void. Room: ' + roomCode, isSystem:true });
-  addMessage({ text: 'Alias: ' + myHandle, isSystem:true });
-  addMessage({ text: 'Share the room code to invite peers.', isSystem:true });
-
+  showScreen('chat'); setConnStatus('alone'); updateCount();
+  addMsg({ text: 'You entered the void. Room: ' + roomCode, isSystem: true });
+  addMsg({ text: 'Alias: ' + myHandle, isSystem: true });
+  addMsg({ text: 'Share the code to connect with peers.', isSystem: true });
   if (asCreator) {
-    // Try to claim the well-known room peer ID
-    initPeer('nv-' + roomCode, () => {
-      showToast('Room ready — share code: ' + roomCode);
-    });
+    initPeer('nv-' + roomCode, () => toast('Room ready — share code: ' + roomCode));
   } else {
-    // Joiner: get random peer ID then connect to creator
-    initPeer(null, () => {
-      connectTo('nv-' + roomCode);
-    });
+    initPeer(null, () => connectTo('nv-' + roomCode));
   }
 }
 
@@ -1186,123 +747,73 @@ function leaveRoom() {
   conns.forEach(c => { try { c.close(); } catch(e){} });
   conns.clear();
   if (myPeer) { try { myPeer.destroy(); } catch(e){} myPeer = null; }
-
-  // Revoke all image object URLs
-  imageUrls.forEach(u => URL.revokeObjectURL(u));
-  imageUrls.clear();
   imgBufs = {};
-
-  // Reset typing state
-  hideTyping();
-  clearTimeout(typingTimer);
-  clearTimeout(typingClear);
-  iAmTyping = false;
-  lastTypeSent = 0;
-
+  typingInner.classList.remove('show');
+  clearTimeout(typingTimer); clearTimeout(typingClear);
+  iAmTyping = false; lastTypeSent = 0;
   messagesEl.innerHTML = '';
-  msgInput.value = '';
-  autoResize();
-  roomCode = '';
-  myPeerId = null;
-
+  msgInput.value = ''; autoResize();
+  roomCode = ''; myPeerId = null;
   showScreen('lobby');
 }
 
-/* ══════════════════════════════════════════════════════════
-   SEND TEXT MESSAGE
-══════════════════════════════════════════════════════════ */
-function sendMessage() {
+/* ════════════════════════
+   SEND TEXT
+════════════════════════ */
+function sendMsg() {
   const text = msgInput.value.trim();
   if (!text) return;
-
-  const time = ts();
-  addMessage({ handle: myHandle, text, time, isSelf:true });
-  broadcast({ type:'text', handle: myHandle, text, time });
-
-  msgInput.value = '';
-  autoResize();
-
-  if (iAmTyping) {
-    broadcastTyping('stop_typing');
-    iAmTyping = false;
-    clearTimeout(typingTimer);
-    lastTypeSent = 0;
-  }
+  const time = nowTs();
+  addMsg({ handle: myHandle, text, time, isSelf: true });
+  broadcast({ type: 'text', handle: myHandle, text, time });
+  msgInput.value = ''; autoResize();
+  if (iAmTyping) { bcastTyping('stop_typing'); iAmTyping = false; clearTimeout(typingTimer); lastTypeSent = 0; }
   msgInput.focus();
 }
 
-/* ══════════════════════════════════════════════════════════
-   TEXTAREA AUTO-RESIZE
-══════════════════════════════════════════════════════════ */
 function autoResize() {
   msgInput.style.height = 'auto';
   msgInput.style.height = Math.min(msgInput.scrollHeight, 130) + 'px';
 }
 
-/* ══════════════════════════════════════════════════════════
+/* ════════════════════════
    LIGHTBOX
-══════════════════════════════════════════════════════════ */
-function openLightbox(url) {
-  lightboxImg.src = url;
-  lightbox.classList.add('open');
-}
+════════════════════════ */
+function openLB(url) { lbImg.src = url; lightbox.classList.add('open'); }
+function closeLB()   { lightbox.classList.remove('open'); lbImg.src = ''; }
+lightbox.onclick = e => { if (e.target === lightbox) closeLB(); };
+lbClose.onclick  = closeLB;
 
-function closeLightbox() {
-  lightbox.classList.remove('open');
-  lightboxImg.src = '';
-}
-
-lightbox.addEventListener('click', e => { if (e.target === lightbox || e.target === lightboxImg) closeLightbox(); });
-lightboxClose.addEventListener('click', closeLightbox);
-
-/* ══════════════════════════════════════════════════════════
-   COPY ROOM CODE
-══════════════════════════════════════════════════════════ */
-copyBtn.addEventListener('click', () => {
+/* ════════════════════════
+   COPY CODE
+════════════════════════ */
+copyBtn.onclick = () => {
   if (!roomCode) return;
   if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(roomCode)
-      .then(() => showToast('Copied: ' + roomCode))
-      .catch(() => fallbackCopy(roomCode));
-  } else {
-    fallbackCopy(roomCode);
-  }
-});
-
+    navigator.clipboard.writeText(roomCode).then(() => toast('Copied: ' + roomCode)).catch(() => fallbackCopy(roomCode));
+  } else { fallbackCopy(roomCode); }
+};
 function fallbackCopy(text) {
   const ta = document.createElement('textarea');
   ta.value = text;
   Object.assign(ta.style, { position:'fixed', opacity:'0', top:'0', left:'0' });
-  document.body.appendChild(ta);
-  ta.focus(); ta.select();
-  try { document.execCommand('copy'); showToast('Copied: ' + text); } catch(e){}
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); toast('Copied: ' + text); } catch(e){}
   ta.remove();
 }
 
-/* ══════════════════════════════════════════════════════════
-   CLIPBOARD PASTE (Ctrl+V image)
-══════════════════════════════════════════════════════════ */
+/* ════════════════════════
+   PASTE / DRAG-DROP
+════════════════════════ */
 document.addEventListener('paste', e => {
   if (curScreen !== 'chat') return;
-  const items = e.clipboardData?.items;
-  if (!items) return;
-  for (const item of items) {
-    if (item.type.startsWith('image/')) {
-      e.preventDefault();
-      handleImageFile(item.getAsFile());
-      return;
-    }
+  for (const item of (e.clipboardData?.items || [])) {
+    if (item.type.startsWith('image/')) { e.preventDefault(); processImage(item.getAsFile()); return; }
   }
 });
-
-/* ══════════════════════════════════════════════════════════
-   DRAG AND DROP
-══════════════════════════════════════════════════════════ */
 document.addEventListener('dragenter', e => {
-  e.preventDefault();
-  if (curScreen !== 'chat') return;
-  dragCount++;
-  dragOverlay.classList.add('show');
+  e.preventDefault(); if (curScreen !== 'chat') return;
+  dragCount++; dragOverlay.classList.add('show');
 });
 document.addEventListener('dragleave', () => {
   dragCount = Math.max(0, dragCount - 1);
@@ -1310,67 +821,37 @@ document.addEventListener('dragleave', () => {
 });
 document.addEventListener('dragover', e => e.preventDefault());
 document.addEventListener('drop', e => {
-  e.preventDefault();
-  dragCount = 0;
-  dragOverlay.classList.remove('show');
+  e.preventDefault(); dragCount = 0; dragOverlay.classList.remove('show');
   if (curScreen !== 'chat') return;
-  const file = e.dataTransfer?.files[0];
-  if (file) handleImageFile(file);
+  const f = e.dataTransfer?.files[0]; if (f) processImage(f);
 });
 
-/* ══════════════════════════════════════════════════════════
-   LOBBY EVENT WIRING
-══════════════════════════════════════════════════════════ */
-createBtn.addEventListener('click', () => enterRoom(genRoomCode(), true));
-
-joinBtn.addEventListener('click', () => {
+/* ════════════════════════
+   EVENT WIRING
+════════════════════════ */
+createBtn.onclick  = () => enterRoom(genCode(), true);
+joinBtn.onclick    = () => {
   const code = joinInput.value.trim().toUpperCase();
-  if (code.length !== 6) { setJoinError('Enter a 6-character room code.'); return; }
-  joinInput.value = '';
-  enterRoom(code, false);
-});
-
+  if (code.length !== 6) { showJoinErr('Enter a 6-character room code.'); return; }
+  joinInput.value = ''; enterRoom(code, false);
+};
 joinInput.addEventListener('input', e => {
   e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
   joinError.style.display = 'none';
 });
-joinInput.addEventListener('keydown', e => { if (e.key === 'Enter') joinBtn.click(); });
-handleInput.addEventListener('keydown', e => { if (e.key === 'Enter') createBtn.click(); });
-
-/* ══════════════════════════════════════════════════════════
-   CHAT EVENT WIRING
-══════════════════════════════════════════════════════════ */
-sendBtn.addEventListener('click', sendMessage);
-leaveBtn.addEventListener('click', leaveRoom);
-
-msgInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
-
-/* ══════════════════════════════════════════════════════════
-   GLOBAL KEYBOARD
-══════════════════════════════════════════════════════════ */
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    closeLightbox();
-    closeAllPanels();
-  }
-});
-
-/* ══════════════════════════════════════════════════════════
-   CLEANUP ON UNLOAD / BACK
-══════════════════════════════════════════════════════════ */
+joinInput.onkeydown = e => { if (e.key === 'Enter') joinBtn.click(); };
+handleInput.onkeydown = e => { if (e.key === 'Enter') createBtn.click(); };
+sendBtn.onclick = sendMsg;
+leaveBtn.onclick = leaveRoom;
+msgInput.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeLB(); closePopups(); } });
 window.addEventListener('beforeunload', () => {
   conns.forEach(c => { try { c.close(); } catch(e){} });
   if (myPeer) { try { myPeer.destroy(); } catch(e){} }
-  imageUrls.forEach(u => URL.revokeObjectURL(u));
 });
 window.addEventListener('popstate', leaveRoom);
 
-/* ══════════════════════════════════════════════════════════
-   INIT
-══════════════════════════════════════════════════════════ */
-// Prevent iOS double-tap zoom
+/* ── iOS double-tap zoom prevention ── */
 let lastTap = 0;
 document.addEventListener('touchend', e => {
   const now = Date.now();
@@ -1379,11 +860,7 @@ document.addEventListener('touchend', e => {
 }, { passive: false });
 
 autoResize();
-
-console.log(
-  '%c NULLVOID // EPHEMERAL MESH ',
-  'background:#09090b;color:#22c55e;font-family:monospace;font-size:13px;padding:4px 10px;border:1px solid #166534;border-radius:4px;'
-);
+console.log('%c NULLVOID // EPHEMERAL MESH ','background:#09090b;color:#22c55e;font-family:monospace;font-size:13px;padding:4px 10px;border:1px solid #166534;border-radius:4px');
 </script>
 </body>
 </html>
